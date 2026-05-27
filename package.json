@@ -15,8 +15,8 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && chmod +x dist/cli/index.js",
-    "test": "jest",
-    "test:watch": "jest --watch",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "prepublishOnly": "npm run build && npm test"
   },
   "engines": {
