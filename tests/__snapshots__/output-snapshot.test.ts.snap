@@ -1,0 +1,81 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`output schema snapshot (hexmetrics-real-world) matches the v1 contract structure 1`] = `
+{
+  "attemptId": "rem_snapshot-fixed-id",
+  "findings": [
+    {
+      "detail": "@esbuild/linux-x64 is pinned to "latest" — every install may re-resolve the version, defeating the override.",
+      "installedVersion": "0.25.12",
+      "overridePath": [
+        "overrides",
+        "@esbuild/linux-x64",
+      ],
+      "package": "@esbuild/linux-x64",
+      "packageManager": "npm",
+      "pinValue": "latest",
+      "references": [
+        "https://github.com/Hexaxia-Labs/override-audit-cli/blob/main/docs/rules/OA002.md",
+      ],
+      "remediation": {
+        "action": "replace",
+        "explanation": "Replace floating "latest" with concrete floor >=0.25.12 (installed version).",
+        "patch": {
+          "op": "replace",
+          "path": "/overrides/@esbuild~1linux-x64",
+          "value": ">=0.25.12",
+        },
+        "runnableFixCommand": "override-audit --fix --rule OA002 --target @esbuild/linux-x64",
+      },
+      "ruleId": "OA002-FLOATING-TAG",
+      "severity": "medium",
+      "title": "Override pinned to floating tag",
+    },
+    {
+      "detail": "Nested override @esbuild-kit/core-utils.esbuild is valid and effective. A flat top-level "overrides": { "esbuild": "^0.25.0" } would apply across the whole tree.",
+      "overridePath": [
+        "overrides",
+        "@esbuild-kit/core-utils",
+      ],
+      "package": "@esbuild-kit/core-utils",
+      "packageManager": "npm",
+      "pinValue": {
+        "esbuild": "^0.25.0",
+      },
+      "references": [
+        "https://github.com/Hexaxia-Labs/override-audit-cli/blob/main/docs/rules/OA005.md",
+      ],
+      "remediation": {
+        "action": "suggest",
+        "explanation": "Nested override @esbuild-kit/core-utils.esbuild is valid and effective. A flat top-level "overrides": { "esbuild": "^0.25.0" } would apply across the whole tree.",
+        "patch": null,
+        "runnableFixCommand": "override-audit --fix --rule OA005 --target @esbuild-kit/core-utils",
+      },
+      "ruleId": "OA005-NESTED-OVERRIDE",
+      "severity": "info",
+      "subRuleId": "OA005.e-SUSPECT",
+      "title": "Nested override could be flattened to top-level",
+    },
+  ],
+  "generatedAt": "2026-05-27T00:00:00.000Z",
+  "packageManager": "npm",
+  "projectPath": "/FIXTURE/hexmetrics-real-world",
+  "schemaVersion": "1",
+  "summary": {
+    "byRule": {
+      "OA002": 1,
+      "OA005.e": 1,
+    },
+    "bySeverity": {
+      "critical": 0,
+      "high": 0,
+      "info": 1,
+      "low": 0,
+      "medium": 1,
+    },
+    "findingCount": 2,
+  },
+  "tool": "override-audit-cli",
+  "toolVersion": "0.1.0",
+}
+`;
