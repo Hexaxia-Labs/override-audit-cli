@@ -32,7 +32,7 @@ const rangeParent = (parentName: string, parentVersion: string, declaredValue: s
 });
 
 describe('OA006-COUPLED-PLATFORM-BINARY', () => {
-  it('flags override on a platform binary whose installed parent declares it exact', () => {
+  it('flags override on a platform binary at HIGH severity (binary-coupling case)', () => {
     const ctx = ctxOf(
       [e('@esbuild/linux-x64', 'latest')],
       { '@esbuild/linux-x64': [exactParent('esbuild', '0.25.12', '0.25.12')] },
@@ -45,7 +45,24 @@ describe('OA006-COUPLED-PLATFORM-BINARY', () => {
       package: '@esbuild/linux-x64',
       remediation: { action: 'suggest' },
     });
+    expect(findings[0]!.title).toContain('platform binary');
     expect(findings[0]!.remediation.explanation).toContain('"esbuild": ">=0.25.12"');
+  });
+
+  it('flags non-platform-binary target at MEDIUM severity (currently effective, but fragile)', () => {
+    const ctx = ctxOf(
+      [e('postcss', '^8.5.15')],
+      { postcss: [exactParent('next', '16.2.6', '8.4.31')] },
+    );
+    const findings = detect(ctx);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      ruleId: 'OA006-COUPLED-PLATFORM-BINARY',
+      severity: 'medium',
+      package: 'postcss',
+    });
+    expect(findings[0]!.title).toContain('fragile');
+    expect(findings[0]!.remediation.explanation).toContain('"next": ">=16.2.6"');
   });
 
   it('does NOT flag when the only parents declare via ranges (not exact)', () => {

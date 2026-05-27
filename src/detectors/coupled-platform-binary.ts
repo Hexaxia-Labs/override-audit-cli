@@ -1,6 +1,7 @@
 import semver from 'semver';
-import type { Context, Finding, ParentDeclaration } from '../types.js';
+import type { Context, Finding, ParentDeclaration, Severity } from '../types.js';
 import { jsonPointer } from '../fixer/json-pointer.js';
+import { looksLikePlatformBinary } from './platform-binary.js';
 
 const RULE_ID = 'OA006-COUPLED-PLATFORM-BINARY' as const;
 
@@ -43,10 +44,20 @@ export function detect(ctx: Context): Finding[] {
     const parentChoice = chooseParent(exactParents);
     const suggestedFloor = suggestParentFloor(pinValue, parentChoice);
 
+    // Severity tiers (refined in v0.1.2 per issue #8):
+    //   - Platform-binary target  → high (binary-coupling failure mode is severe)
+    //   - Non-platform target     → medium (often works; scanner may escalate
+    //                              to high in post-processing if OA008 also
+    //                              fires for the same target)
+    const isPlatform = looksLikePlatformBinary(entry.packageName);
+    const severity: Severity = isPlatform ? 'high' : 'medium';
+
     findings.push({
       ruleId: RULE_ID,
-      severity: 'high',
-      title: 'Override on platform binary fights an exact-pinned parent',
+      severity,
+      title: isPlatform
+        ? 'Override on platform binary fights an exact-pinned parent'
+        : 'Override fights an exact-pinned parent (currently effective, but fragile)',
       detail:
         `${entry.packageName} is overridden to "${pinValue}", but its installed parent ` +
         `${parentChoice.parentName}@${parentChoice.parentVersion} declares it as exact ` +

@@ -8,6 +8,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing yet. See the [roadmap in README.md](README.md#roadmap) for what's next.
 
+## [0.1.2] — 2026-05-27
+
+Refines OA006 severity per the v0.1.1 dogfood discovery (issue [#8](https://github.com/Hexaxia-Labs/override-audit-cli/issues/8)). v0.1.1 was emitting `high` uniformly even when the override pattern was currently effective; that produced false-urgency on common range-override-vs-exact-pin cases like `postcss: "^8.5.15"` against `next`'s `postcss: "8.4.31"`.
+
+### Changed
+- **OA006-COUPLED-PLATFORM-BINARY** severity is now tiered:
+  - `high` — target matches a platform-binary pattern (e.g. `@esbuild/<platform>`, `@next/swc-<platform>`, `@img/sharp-<platform>`, `lightningcss-<platform>`). The binary-coupling failure mode is severe.
+  - `medium` — non-platform target (e.g. `postcss`, `react`) when the override is currently effective. Pattern is risky but not actively broken.
+  - **escalates to `high`** when OA008-VULNERABLE-TWIN also fires for the same target (the risk has materialized on disk).
+- Title text reflects the tier: "Override on platform binary fights an exact-pinned parent" vs "currently effective, but fragile" vs "vulnerable copy on disk — OA008 confirms".
+
+### Added
+- `src/detectors/platform-binary.ts` — `looksLikePlatformBinary(name)` heuristic. Matches OS segments anchored to slash/hyphen boundaries.
+- Scanner-level composite escalation step (OA006 + OA008 → high).
+- `tests/scanner-composite.test.ts` for the escalation path.
+
+### Notes
+- No new rules. No schema change.
+- 160 tests across 26 suites, all passing.
+
 ## [0.1.1] — 2026-05-27
 
 Adds three new detectors discovered via dogfooding v0.1.0 against `/home/aaron/Projects/hexmetrics`. The original `"@esbuild/linux-x64": "latest"` override revealed a class of override-hygiene bugs that no static analyser was catching — these three rules close that gap.
@@ -53,6 +73,7 @@ Initial release. **Detection only**; `--fix` lands in `v0.2.0`.
 - No color output yet (tracked in [#4](https://github.com/Hexaxia-Labs/override-audit-cli/issues/4)).
 - `OA005.e-SUSPECT` is info-level and filtered from output unless `--include-sub-suspect --severity info`.
 
-[Unreleased]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Hexaxia-Labs/override-audit-cli/releases/tag/v0.1.0

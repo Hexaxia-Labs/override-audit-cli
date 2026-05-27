@@ -107,9 +107,25 @@ export async function scan(projectPath: string, opts: ScanOptions = {}): Promise
   const oa005Outers = new Set(
     rawFindings.filter(f => f.ruleId === 'OA005-NESTED-OVERRIDE').map(f => f.package),
   );
-  const findings = rawFindings.filter(f =>
+  const dedupedFindings = rawFindings.filter(f =>
     !(f.ruleId === 'OA001-ORPHAN-TARGET' && oa005Outers.has(f.package))
   );
+
+  // OA006/OA008 composite: if OA008 also fires for a target, the OA006 risk has
+  // materialized — escalate OA006 to 'high' regardless of platform-binary heuristic.
+  const oa008Targets = new Set(
+    dedupedFindings.filter(f => f.ruleId === 'OA008-VULNERABLE-TWIN').map(f => f.package),
+  );
+  const findings = dedupedFindings.map((f) => {
+    if (f.ruleId === 'OA006-COUPLED-PLATFORM-BINARY' && f.severity === 'medium' && oa008Targets.has(f.package)) {
+      return {
+        ...f,
+        severity: 'high' as const,
+        title: 'Override fights an exact-pinned parent (vulnerable copy on disk — OA008 confirms)',
+      };
+    }
+    return f;
+  });
 
   return { context, findings };
 }

@@ -59,7 +59,7 @@ override-audit --with-registry       # enable OA007 frozen-latest (needs network
 | `OA003-WRONG-SECTION` | high | `pnpm.overrides` in npm project (or vice versa) |
 | `OA004-INSTALLED-NEWER` | low | Installed version surpassed concrete pin |
 | `OA005-NESTED-OVERRIDE` | info–critical | Nested-object override (5 sub-codes) |
-| `OA006-COUPLED-PLATFORM-BINARY` | high | Override fights an exact-pinned parent (e.g. `@esbuild/<platform>` vs `esbuild`) |
+| `OA006-COUPLED-PLATFORM-BINARY` | high / medium | Override fights an exact-pinned parent. **High** for platform binaries (`@esbuild/<platform>` vs `esbuild`) or when OA008 confirms failure; **medium** for non-platform targets where the override is currently effective. |
 | `OA007-FROZEN-LATEST` | high | `"latest"` pin resolved long ago, registry has moved on (`--with-registry`) |
 | `OA008-VULNERABLE-TWIN` | critical | Vulnerable copy still on disk despite override floor — post-install verification |
 

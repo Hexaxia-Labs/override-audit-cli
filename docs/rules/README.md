@@ -9,7 +9,7 @@ Reference docs for the eight rules in v0.1.1.
 | `OA003-WRONG-SECTION` | high | `move` | [OA003.md](OA003.md) |
 | `OA004-INSTALLED-NEWER` | low | `remove` / `suggest` | [OA004.md](OA004.md) |
 | `OA005-NESTED-OVERRIDE` | info–critical | varies | [OA005.md](OA005.md) |
-| `OA006-COUPLED-PLATFORM-BINARY` | high | `suggest` | [OA006.md](OA006.md) |
+| `OA006-COUPLED-PLATFORM-BINARY` | high (platform) / medium (other) | `suggest` | [OA006.md](OA006.md) |
 | `OA007-FROZEN-LATEST` | high | `suggest` (`--with-registry`) | [OA007.md](OA007.md) |
 | `OA008-VULNERABLE-TWIN` | critical | `suggest` | [OA008.md](OA008.md) |
 
