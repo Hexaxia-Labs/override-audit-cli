@@ -1,7 +1,7 @@
 # override-audit-cli
 
-[![version](https://img.shields.io/badge/version-v0.2.0-blue)](CHANGELOG.md)
-[![tests](https://img.shields.io/badge/tests-182%20passing-43853d?logo=jest&logoColor=white)](#)
+[![version](https://img.shields.io/badge/version-v0.2.1-blue)](CHANGELOG.md)
+[![tests](https://img.shields.io/badge/tests-188%20passing-43853d?logo=jest&logoColor=white)](#)
 [![detectors](https://img.shields.io/badge/detectors-8-43853d)](docs/rules/)
 [![node](https://img.shields.io/badge/node-%E2%89%A518-43853d?logo=node.js&logoColor=white)](https://nodejs.org)
 [![typescript](https://img.shields.io/badge/typescript-5.x-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)

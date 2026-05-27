@@ -61,12 +61,9 @@ export function detect(ctx: Context): Finding[] {
       installedVersion: installed,
       packageManager: ctx.packageManager,
       remediation: {
-        action: 'suggest',
-        patch: null,
-        runnableFixCommand:
-          `# Replace the floating tag with a concrete floor at the current registry latest:\n` +
-          `#   "${jsonPointer(entry.path).slice(1).replace(/\//g, '.')}": ">=${registryVersion}"\n` +
-          `# Then: rm -rf node_modules package-lock.json && npm install`,
+        action: 'replace',
+        patch: { op: 'replace', path: jsonPointer(entry.path), value: `>=${registryVersion}` },
+        runnableFixCommand: `override-audit --fix --rule OA007 --target ${entry.packageName}`,
         explanation:
           `Replace "${tag}" with ">=${registryVersion}" — concrete floor encoding ` +
           `"never go below the current registry ${tag}". The resolver will pick the ` +

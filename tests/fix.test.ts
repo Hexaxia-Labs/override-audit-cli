@@ -95,6 +95,57 @@ describe('fix orchestrator', () => {
     expect(oa002Skipped!.reason).toContain('suggest-only');
   });
 
+  it('applies multi-op patches (OA006 remove-binary + add-parent)', async () => {
+    // Construct fixture: override @esbuild/linux-x64=latest, installed parent esbuild@0.28.0
+    // pins it exact. OA006 should fire AND emit a multi-op fix.
+    rmSync(TMP, { recursive: true, force: true });
+    mkdirSync(TMP, { recursive: true });
+    writeFileSync(
+      join(TMP, 'package.json'),
+      JSON.stringify({
+        name: 'multi-op-test', version: '0.0.0',
+        overrides: { '@esbuild/linux-x64': 'latest' },
+      }, null, 2) + '\n',
+    );
+    writeFileSync(
+      join(TMP, 'package-lock.json'),
+      JSON.stringify({
+        name: 'multi-op-test', version: '0.0.0', lockfileVersion: 3,
+        packages: { '': {}, 'node_modules/esbuild': { version: '0.28.0' }, 'node_modules/@esbuild/linux-x64': { version: '0.25.12' } },
+      }),
+    );
+    mkdirSync(join(TMP, 'node_modules', 'esbuild'), { recursive: true });
+    writeFileSync(
+      join(TMP, 'node_modules', 'esbuild', 'package.json'),
+      JSON.stringify({ name: 'esbuild', version: '0.28.0', optionalDependencies: { '@esbuild/linux-x64': '0.28.0' } }),
+    );
+    mkdirSync(join(TMP, 'node_modules', '@esbuild', 'linux-x64'), { recursive: true });
+    writeFileSync(
+      join(TMP, 'node_modules', '@esbuild', 'linux-x64', 'package.json'),
+      JSON.stringify({ name: '@esbuild/linux-x64', version: '0.25.12' }),
+    );
+
+    const before = await scan(TMP);
+    const oa006 = before.findings.find(f => f.ruleId === 'OA006-COUPLED-PLATFORM-BINARY');
+    expect(oa006).toBeDefined();
+    expect(oa006!.remediation.patches?.length).toBe(2);
+
+    const report = await fix(before, {
+      dryRun: false, rescan: true, severityFloor: 'info',
+      ruleFilters: new Map(), includeSubSuspect: false,
+    }, 'rem_multi-op');
+
+    // Verify both patches were applied as a single AppliedPatch entry.
+    const applied = report.appliedPatches.find(p => p.ruleId === 'OA006-COUPLED-PLATFORM-BINARY');
+    expect(applied).toBeDefined();
+    expect(applied!.patches.length).toBe(2);
+
+    // Verify on-disk result: binary override removed, parent override added.
+    const after = JSON.parse(readFileSync(join(TMP, 'package.json'), 'utf-8'));
+    expect(after.overrides['@esbuild/linux-x64']).toBeUndefined();
+    expect(after.overrides.esbuild).toBe('>=0.28.0');
+  });
+
   it('respects severity floor — skips findings below it', async () => {
     // postcss override with same version as installed → no findings normally.
     // Add an orphan target which produces a 'low' finding. With floor='high', skip it.

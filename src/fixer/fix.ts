@@ -1,5 +1,5 @@
 import type {
-  ScanResult, FixReport, FixOptions, AppliedPatch, SkippedForFix, Finding,
+  ScanResult, FixReport, FixOptions, AppliedPatch, SkippedForFix, Finding, RFC6902Patch,
 } from '../types.js';
 import { SEVERITY_RANK } from '../types.js';
 import { applyPatches } from './apply.js';
@@ -72,8 +72,15 @@ export async function fix(
       continue;
     }
 
-    // No automated patch.
-    if (f.remediation.patch === null) {
+    // Resolve patches: prefer multi-op `patches`, fall back to single-op `patch`.
+    const patches: RFC6902Patch[] =
+      f.remediation.patches && f.remediation.patches.length > 0
+        ? f.remediation.patches
+        : f.remediation.patch
+          ? [f.remediation.patch]
+          : [];
+
+    if (patches.length === 0) {
       skipped.push({
         ruleId: f.ruleId, subRuleId: f.subRuleId, package: f.package,
         reason: `${f.remediation.action}-only (no automated patch)`,
@@ -83,10 +90,11 @@ export async function fix(
 
     // Apply.
     try {
-      currentDoc = applyPatches(currentDoc, [f.remediation.patch]);
+      currentDoc = applyPatches(currentDoc, patches);
       applied.push({
         ruleId: f.ruleId, subRuleId: f.subRuleId, package: f.package,
-        patch: f.remediation.patch,
+        patch: patches[0]!,
+        patches,
       });
     } catch (err) {
       skipped.push({

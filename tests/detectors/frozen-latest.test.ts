@@ -41,6 +41,21 @@ describe('OA007-FROZEN-LATEST', () => {
     expect(findings[0]!.remediation.explanation).toContain('">=0.28.0"');
   });
 
+  it('emits a replace patch with the registry-latest floor (v0.2.1)', () => {
+    const ctx = ctxOf(
+      [e('@esbuild/linux-x64', 'latest')],
+      [['@esbuild/linux-x64', '0.25.12']],
+      { '@esbuild/linux-x64': { latest: '0.28.0' } },
+    );
+    const finding = detect(ctx)[0]!;
+    expect(finding.remediation.action).toBe('replace');
+    expect(finding.remediation.patch).toEqual({
+      op: 'replace',
+      path: '/overrides/@esbuild~1linux-x64',
+      value: '>=0.28.0',
+    });
+  });
+
   it('flags "next" pin similarly', () => {
     const ctx = ctxOf(
       [e('some-pkg', 'next')],

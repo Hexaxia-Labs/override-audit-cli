@@ -37,7 +37,17 @@ export type RFC6902Patch =
 
 export interface Remediation {
   action: RemediationAction;
-  patch: RFC6902Patch | null;        // null when action='suggest'
+  /** Single-op patch. Null when the rule's fix is multi-op (see `patches`) or suggest-only. */
+  patch: RFC6902Patch | null;
+  /**
+   * Multi-op patch sequence. When present, fixers apply this in order rather
+   * than the single `patch`. Used by rules whose fix requires multiple ops
+   * (e.g. OA006: remove the binary override AND add a parent override).
+   *
+   * Field is optional for backward compatibility with v0.2.0 consumers.
+   * Single-op rules continue to use `patch` and leave this undefined.
+   */
+  patches?: RFC6902Patch[];
   runnableFixCommand?: string;
   explanation: string;
 }
@@ -67,7 +77,10 @@ export interface AppliedPatch {
   ruleId: RuleId;
   subRuleId?: SubRuleId;
   package: string;
+  /** Primary patch op (first element of patches; convenience for single-op consumers). */
   patch: RFC6902Patch;
+  /** Full ordered op list. Present when the fix was multi-op; for single-op fixes this is just [patch]. */
+  patches: RFC6902Patch[];
 }
 
 export interface SkippedForFix {

@@ -8,6 +8,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing yet. See the [roadmap in README.md](README.md#roadmap) for what's next.
 
+## [0.2.1] — 2026-05-27
+
+Upgrades OA006 and OA007 from `suggest`-only to genuinely fixable. The `--fix` flow now closes the dogfood loop end-to-end: the tool that *discovered* the parent-override pattern can now *apply* it.
+
+### Added
+- **`Remediation.patches?: RFC6902Patch[]`** — additive multi-op patch field. Single-op rules continue to use `patch`; rules whose fix requires multiple ops set `patches` (and leave `patch` null).
+- **`AppliedPatch.patches: RFC6902Patch[]`** — the full op list applied for a finding. Single-op fixes have `[patch]`; multi-op fixes have all ops.
+- **OA006-COUPLED-PLATFORM-BINARY** now emits a two-op patch:
+  1. `remove` the binary override at its container path.
+  2. `add` (or `replace`, if a parent override already exists) the parent override at `>=<parent-installed-version>` in the same container.
+  Action upgraded from `suggest` to `replace`. pnpm and npm containers both supported.
+- **OA007-FROZEN-LATEST** now emits a single-op `replace` patch swapping the floating tag for `>=<registry-latest>`. Action upgraded from `suggest` to `replace`.
+- New tests covering: multi-op patch emission, existing-parent-override → replace path, container mirroring (npm vs pnpm.overrides), OA007 replace patch, and end-to-end multi-op fix application in the orchestrator.
+
+### Changed
+- The fix orchestrator resolves `patches` first, falling back to `patch` for backward compatibility with v0.2.0 fixtures.
+
+### Dogfood verification
+Against a copy of real-world hexmetrics:
+```
+- "postcss": "8.5.15",                  // OA006 (next pins exact)
+- "@esbuild/linux-x64": "latest"        // OA002 + OA006 + OA007
++ "next": ">=16.2.6",                   // OA006 → parent override
++ "esbuild": ">=0.28.0"                 // OA006 → parent override
+```
+Three patches applied, package.json structurally rewritten exactly as the rule explanations described.
+
+### Notes
+- 187 tests across 29 suites, all passing.
+- No schema break. v0.2.0 consumers reading `patch` continue to work; new consumers can prefer `patches` when present.
+- OA008 stays suggest-only (its fix requires investigation, not a deterministic patch).
+
 ## [0.2.0] — 2026-05-27
 
 Ships `--fix`. The tool now rewrites `package.json` in place to apply the RFC 6902 patches detectors emit — moving from detection-only to detect-and-fix in the same flow.
@@ -102,7 +134,8 @@ Initial release. **Detection only**; `--fix` lands in `v0.2.0`.
 - No color output yet (tracked in [#4](https://github.com/Hexaxia-Labs/override-audit-cli/issues/4)).
 - `OA005.e-SUSPECT` is info-level and filtered from output unless `--include-sub-suspect --severity info`.
 
-[Unreleased]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.1.0...v0.1.1

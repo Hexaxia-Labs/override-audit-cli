@@ -1,5 +1,5 @@
 import semver from 'semver';
-import type { Context, Finding, ParentDeclaration, Severity } from '../types.js';
+import type { Context, Finding, ParentDeclaration, Severity, RFC6902Patch, OverrideEntry } from '../types.js';
 import { jsonPointer } from '../fixer/json-pointer.js';
 import { looksLikePlatformBinary } from './platform-binary.js';
 
@@ -52,6 +52,29 @@ export function detect(ctx: Context): Finding[] {
     const isPlatform = looksLikePlatformBinary(entry.packageName);
     const severity: Severity = isPlatform ? 'high' : 'medium';
 
+    // Build the multi-op patch: remove the binary override, add a parent override.
+    // The parent-override path lives in the same container as the binary one
+    // (top-level overrides for npm, pnpm.overrides for pnpm).
+    const parentPath = buildParentOverridePath(entry, parentChoice.parentName);
+    const existingParentEntry = findExistingOverride(ctx, parentChoice.parentName);
+
+    let patches: RFC6902Patch[];
+    if (existingParentEntry) {
+      // Parent already has an override — replace its value with the suggested floor.
+      // Single-op (no removal needed if the binary override doesn't exist… but it does).
+      // Actually still multi-op: remove binary + replace existing parent.
+      patches = [
+        { op: 'remove', path: jsonPointer(entry.path) },
+        { op: 'replace', path: jsonPointer(existingParentEntry.path), value: suggestedFloor },
+      ];
+    } else {
+      // No existing parent override — remove binary + add new parent entry.
+      patches = [
+        { op: 'remove', path: jsonPointer(entry.path) },
+        { op: 'add', path: jsonPointer(parentPath), value: suggestedFloor },
+      ];
+    }
+
     findings.push({
       ruleId: RULE_ID,
       severity,
@@ -70,16 +93,15 @@ export function detect(ctx: Context): Finding[] {
       installedVersion: ctx.installedVersions.get(entry.packageName),
       packageManager: ctx.packageManager,
       remediation: {
-        action: 'suggest',
+        action: 'replace',
         patch: null,
-        runnableFixCommand:
-          `# Replace the platform-binary override with a parent override:\n` +
-          `#   "overrides": { "${parentChoice.parentName}": "${suggestedFloor}" }\n` +
-          `# Then: rm -rf node_modules package-lock.json && npm install`,
+        patches,
+        runnableFixCommand: `override-audit --fix --rule OA006 --target ${entry.packageName}`,
         explanation:
-          `Override the parent at a safe floor: "${parentChoice.parentName}": "${suggestedFloor}". ` +
-          `That bumps both the parent and its exact-pinned ${entry.packageName} together. ` +
-          `Remove the current "${jsonPointer(entry.path).slice(1)}" entry.`,
+          `Override the parent at a safe floor: "${parentChoice.parentName}": "${suggestedFloor}" ` +
+          `(${existingParentEntry ? 'updating existing parent override' : 'adding new parent override'}); ` +
+          `remove the current "${jsonPointer(entry.path).slice(1)}" entry. ` +
+          `That bumps both the parent and its exact-pinned ${entry.packageName} together.`,
       },
       references: ['https://github.com/Hexaxia-Labs/override-audit-cli/blob/main/docs/rules/OA006.md'],
     });
@@ -108,4 +130,20 @@ function chooseParent(parents: ParentDeclaration[]): ParentDeclaration {
 function suggestParentFloor(_pin: string, parent: ParentDeclaration): string {
   const cleaned = semver.valid(parent.parentVersion);
   return cleaned ? `>=${cleaned}` : `>=${parent.parentVersion}`;
+}
+
+/**
+ * Build the path where the parent-level override should go, mirroring the
+ * container the original binary override lived in.
+ *   ['overrides', '@esbuild/linux-x64']        → ['overrides', 'esbuild']
+ *   ['pnpm', 'overrides', '@esbuild/linux-x64'] → ['pnpm', 'overrides', 'esbuild']
+ */
+function buildParentOverridePath(entry: OverrideEntry, parentName: string): string[] {
+  const prefix = entry.path.slice(0, -1);
+  return [...prefix, parentName];
+}
+
+/** Find an existing override entry by package name across all containers. */
+function findExistingOverride(ctx: Context, packageName: string): OverrideEntry | undefined {
+  return ctx.overrideEntries.find(e => e.packageName === packageName);
 }

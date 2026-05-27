@@ -43,10 +43,54 @@ describe('OA006-COUPLED-PLATFORM-BINARY', () => {
       ruleId: 'OA006-COUPLED-PLATFORM-BINARY',
       severity: 'high',
       package: '@esbuild/linux-x64',
-      remediation: { action: 'suggest' },
+      remediation: { action: 'replace' },     // v0.2.1: now an automated fix
     });
     expect(findings[0]!.title).toContain('platform binary');
     expect(findings[0]!.remediation.explanation).toContain('"esbuild": ">=0.25.12"');
+  });
+
+  it('emits multi-op patches: remove binary override + add parent override (v0.2.1)', () => {
+    const ctx = ctxOf(
+      [e('@esbuild/linux-x64', 'latest')],
+      { '@esbuild/linux-x64': [exactParent('esbuild', '0.25.12', '0.25.12')] },
+    );
+    const findings = detect(ctx);
+    const patches = findings[0]!.remediation.patches;
+    expect(patches).toHaveLength(2);
+    expect(patches![0]).toEqual({ op: 'remove', path: '/overrides/@esbuild~1linux-x64' });
+    expect(patches![1]).toEqual({ op: 'add', path: '/overrides/esbuild', value: '>=0.25.12' });
+    expect(findings[0]!.remediation.patch).toBeNull();    // single-op field unused for multi-op
+  });
+
+  it('emits replace (not add) when an override on the parent already exists', () => {
+    const ctx = ctxOf(
+      [
+        e('@esbuild/linux-x64', 'latest'),
+        e('esbuild', '^0.18.0'),                   // existing parent override at older floor
+      ],
+      { '@esbuild/linux-x64': [exactParent('esbuild', '0.25.12', '0.25.12')] },
+    );
+    const finding = detect(ctx).find(f => f.package === '@esbuild/linux-x64');
+    const patches = finding!.remediation.patches!;
+    expect(patches[1]).toEqual({ op: 'replace', path: '/overrides/esbuild', value: '>=0.25.12' });
+    expect(finding!.remediation.explanation).toContain('updating existing parent override');
+  });
+
+  it('mirrors the container (pnpm.overrides) for pnpm projects', () => {
+    const ctx = {
+      ...ctxOf([], {}),
+      packageManager: 'pnpm' as const,
+      overrideEntries: [{
+        key: '@esbuild/linux-x64', packageName: '@esbuild/linux-x64', value: 'latest',
+        path: ['pnpm', 'overrides', '@esbuild/linux-x64'], container: 'pnpm.overrides' as const,
+      }],
+      parentDeclarations: new Map([
+        ['@esbuild/linux-x64', [exactParent('esbuild', '0.25.12', '0.25.12')]],
+      ]),
+    };
+    const findings = detect(ctx);
+    const patches = findings[0]!.remediation.patches!;
+    expect(patches[1]).toEqual({ op: 'add', path: '/pnpm/overrides/esbuild', value: '>=0.25.12' });
   });
 
   it('flags non-platform-binary target at MEDIUM severity (currently effective, but fragile)', () => {
