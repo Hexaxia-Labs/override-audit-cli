@@ -1,6 +1,6 @@
 {
   "name": "@hexaxia-labs/override-audit-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Hygiene auditor for npm/pnpm package overrides. Detects orphaned targets, floating-tag pins, misplaced sections, and ineffective nested overrides.",
   "type": "module",
   "main": "./dist/index.js",
@@ -23,7 +23,15 @@
     "node": ">=18"
   },
   "keywords": [
-    "npm", "pnpm", "overrides", "audit", "hygiene", "security", "cli", "lint", "package-json"
+    "npm",
+    "pnpm",
+    "overrides",
+    "audit",
+    "hygiene",
+    "security",
+    "cli",
+    "lint",
+    "package-json"
   ],
   "author": "Aaron Lamb <aaron.lamb@hexaxia.tech>",
   "license": "MIT",

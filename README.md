@@ -39,6 +39,7 @@ override-audit /path/to/project      # audit specific directory
 override-audit --json                # JSON output (for CI / orchestrators)
 override-audit --severity high       # only high+/critical findings (CI gate friendly)
 override-audit --rule OA005.e=off    # silence info-level "suspect" nested findings
+override-audit --with-registry       # enable OA007 frozen-latest (needs network)
 ```
 
 ## Exit codes
@@ -58,8 +59,13 @@ override-audit --rule OA005.e=off    # silence info-level "suspect" nested findi
 | `OA003-WRONG-SECTION` | high | `pnpm.overrides` in npm project (or vice versa) |
 | `OA004-INSTALLED-NEWER` | low | Installed version surpassed concrete pin |
 | `OA005-NESTED-OVERRIDE` | info–critical | Nested-object override (5 sub-codes) |
+| `OA006-COUPLED-PLATFORM-BINARY` | high | Override fights an exact-pinned parent (e.g. `@esbuild/<platform>` vs `esbuild`) |
+| `OA007-FROZEN-LATEST` | high | `"latest"` pin resolved long ago, registry has moved on (`--with-registry`) |
+| `OA008-VULNERABLE-TWIN` | critical | Vulnerable copy still on disk despite override floor — post-install verification |
 
 OA005 sub-codes: `.a-NON-NPM` (critical), `.b-ORPHANED-OUTER` (high), `.c-ORPHANED-INNER` (high), `.d-LEAKY` (medium), `.e-SUSPECT` (info, off by default).
+
+`OA007` requires opt-in network access via `--with-registry`. All other rules run offline.
 
 Per-rule reference docs live in [`docs/rules/`](docs/rules/).
 

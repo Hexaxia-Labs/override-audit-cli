@@ -8,6 +8,9 @@ function ctxOf(entries: OverrideEntry[], installed: [string, string][]): Context
     overrideEntries: entries,
     lockfilePackageNames: new Set(entries.map(e => e.packageName)),
     installedVersions: new Map(installed),
+    installedCopies: new Map(),
+    parentDeclarations: new Map(),
+    registryDistTags: new Map(),
     skippedDetectors: [],
   };
 }

@@ -17,6 +17,9 @@ function ctxOf(entries: OverrideEntry[], opts: CtxOpts = {}): Context {
     overrideEntries: entries,
     lockfilePackageNames: new Set(opts.lockfile ?? entries.map(e => e.packageName)),
     installedVersions: new Map(opts.installed ?? []),
+    installedCopies: new Map(),
+    parentDeclarations: new Map(),
+    registryDistTags: new Map(),
     skippedDetectors: [],
     // Detector reads its own manifest lookup via a hook injected on ctx (see helper below).
     // Pass it via a non-typed extension; the detector code below accepts an injected resolver.

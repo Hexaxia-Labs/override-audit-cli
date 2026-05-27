@@ -5,6 +5,9 @@ const baseCtx: Context = {
   projectPath: '/p', packageJson: {}, packageJsonRaw: '{}',
   packageManager: 'npm', overrideEntries: [],
   lockfilePackageNames: new Set(), installedVersions: new Map(),
+  installedCopies: new Map(),
+  parentDeclarations: new Map(),
+  registryDistTags: new Map(),
   skippedDetectors: [],
 };
 const sampleFinding: Finding = {

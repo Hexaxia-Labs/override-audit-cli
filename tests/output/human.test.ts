@@ -5,6 +5,9 @@ const ctx: Context = {
   projectPath: '/p/hexmetrics', packageJson: {}, packageJsonRaw: '{}',
   packageManager: 'npm', overrideEntries: [],
   lockfilePackageNames: new Set(), installedVersions: new Map(),
+  installedCopies: new Map(),
+  parentDeclarations: new Map(),
+  registryDistTags: new Map(),
   skippedDetectors: [],
 };
 

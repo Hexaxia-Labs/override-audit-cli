@@ -61,6 +61,12 @@ exports[`output schema snapshot (hexmetrics-real-world) matches the v1 contract 
   "packageManager": "npm",
   "projectPath": "/FIXTURE/hexmetrics-real-world",
   "schemaVersion": "1",
+  "skippedDetectors": [
+    {
+      "reason": "--with-registry not passed — frozen-latest check disabled (offline by default)",
+      "ruleId": "OA007-FROZEN-LATEST",
+    },
+  ],
   "summary": {
     "byRule": {
       "OA002": 1,

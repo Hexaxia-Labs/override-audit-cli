@@ -14,7 +14,10 @@ export type RuleId =
   | 'OA002-FLOATING-TAG'
   | 'OA003-WRONG-SECTION'
   | 'OA004-INSTALLED-NEWER'
-  | 'OA005-NESTED-OVERRIDE';
+  | 'OA005-NESTED-OVERRIDE'
+  | 'OA006-COUPLED-PLATFORM-BINARY'
+  | 'OA007-FROZEN-LATEST'
+  | 'OA008-VULNERABLE-TWIN';
 
 export type SubRuleId =
   | 'OA005.a-NON-NPM'
@@ -90,6 +93,37 @@ export interface OverrideEntry {
   container: 'overrides' | 'pnpm.overrides' | 'resolutions';
 }
 
+/** One installed copy of a package somewhere under node_modules. */
+export interface InstalledCopy {
+  /** Package name (e.g. '@esbuild/linux-x64'). */
+  name: string;
+  /** Absolute path to the copy's directory under node_modules. */
+  path: string;
+  /** Version from that copy's package.json. */
+  version: string;
+}
+
+/** A parent package that declares the target as a dependency. */
+export interface ParentDeclaration {
+  /** Parent's package name. */
+  parentName: string;
+  /** Parent's installed version. */
+  parentVersion: string;
+  /** Where in the parent's manifest the dep was declared. */
+  declaredIn: 'dependencies' | 'optionalDependencies' | 'peerDependencies';
+  /** The version range/value the parent wrote (e.g. '0.25.12' or '^0.25.0'). */
+  declaredValue: string;
+  /** True if declaredValue is a concrete pin like '0.25.12' (not a range). */
+  exactVersion: boolean;
+}
+
+/** Registry dist-tags response (subset). */
+export interface RegistryDistTags {
+  latest?: string;
+  next?: string;
+  [tag: string]: string | undefined;
+}
+
 /** Built once per scan; consumed by all detectors. */
 export interface Context {
   projectPath: string;
@@ -100,8 +134,14 @@ export interface Context {
   overrideEntries: OverrideEntry[];
   /** Bare package names present anywhere in the lockfile resolved tree. */
   lockfilePackageNames: Set<string>;
-  /** name → installed version from node_modules/<name>/package.json. */
+  /** name → installed version from node_modules/<name>/package.json (top-level only). */
   installedVersions: Map<string, string>;
+  /** name → every installed copy in the tree (top-level + nested). Populated lazily by detectors that need it. */
+  installedCopies: Map<string, InstalledCopy[]>;
+  /** name → parents that declare it as a dep (for coupled-binary analysis). */
+  parentDeclarations: Map<string, ParentDeclaration[]>;
+  /** name → registry dist-tags (populated only when --with-registry). */
+  registryDistTags: Map<string, RegistryDistTags>;
   /** Detectors that couldn't run; pass through to output.skippedDetectors. */
   skippedDetectors: { ruleId: RuleId; reason: string }[];
 }

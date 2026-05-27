@@ -52,7 +52,10 @@ export async function run(argv: string[], io: RunIO = DEFAULT_IO): Promise<numbe
 
   let result;
   try {
-    result = await scan(path);
+    result = await scan(path, {
+      withRegistry: args.withRegistry,
+      ...(args.registryTimeoutMs ? { registry: { timeoutMs: args.registryTimeoutMs } } : {}),
+    });
   } catch (err) {
     io.eprint(`error: ${(err as Error).message}\n`);
     return 2;

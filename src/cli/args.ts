@@ -16,6 +16,10 @@ export interface ParsedArgs {
   help: boolean;
   version: boolean;
   noColor: boolean;
+  /** Enable OA007 frozen-latest registry check (opt-in network). */
+  withRegistry: boolean;
+  /** Registry timeout in ms (used with --with-registry). */
+  registryTimeoutMs?: number;
 }
 
 const VALID_SEVERITIES: Severity[] = ['critical', 'high', 'medium', 'low', 'info'];
@@ -28,6 +32,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   const out: ParsedArgs = {
     json: false, severity: 'low', ruleFilters: new Map(),
     includeSubSuspect: false, help: false, version: false, noColor: false,
+    withRegistry: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -42,6 +47,17 @@ export function parseArgs(argv: string[]): ParsedArgs {
     if (a === '--json') { out.json = true; continue; }
     if (a === '--no-color') { out.noColor = true; continue; }
     if (a === '--include-sub-suspect') { out.includeSubSuspect = true; continue; }
+    if (a === '--with-registry') { out.withRegistry = true; continue; }
+
+    if (a === '--registry-timeout') {
+      const v = argv[++i];
+      const n = v ? Number(v) : NaN;
+      if (!Number.isFinite(n) || n <= 0) {
+        throw new UsageError(`--registry-timeout expects a positive number of milliseconds, got ${JSON.stringify(v)}`);
+      }
+      out.registryTimeoutMs = n;
+      continue;
+    }
 
     if (a === '--severity') {
       const v = argv[++i];
