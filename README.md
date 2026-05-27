@@ -1,7 +1,11 @@
 # override-audit-cli
 
-[![CI](https://img.shields.io/github/actions/workflow/status/Hexaxia-Labs/override-audit-cli/ci.yml?branch=main)](https://github.com/Hexaxia-Labs/override-audit-cli/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/Hexaxia-Labs/override-audit-cli/ci.yml?branch=main&label=CI)](https://github.com/Hexaxia-Labs/override-audit-cli/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Hexaxia-Labs/override-audit-cli?include_prereleases&sort=semver&display_name=tag)](https://github.com/Hexaxia-Labs/override-audit-cli/releases)
+[![Node](https://img.shields.io/badge/node-%E2%89%A518-43853d?logo=node.js&logoColor=white)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/typescript-5.x-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![License](https://img.shields.io/github/license/Hexaxia-Labs/override-audit-cli)](LICENSE)
+[![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-fa6673?logo=conventionalcommits&logoColor=white)](https://www.conventionalcommits.org)
 
 Hygiene auditor for npm and pnpm package `overrides` blocks.
 
@@ -57,6 +61,8 @@ override-audit --rule OA005.e=off    # silence info-level "suspect" nested findi
 
 OA005 sub-codes: `.a-NON-NPM` (critical), `.b-ORPHANED-OUTER` (high), `.c-ORPHANED-INNER` (high), `.d-LEAKY` (medium), `.e-SUSPECT` (info, off by default).
 
+Per-rule reference docs live in [`docs/rules/`](docs/rules/).
+
 ## Roadmap
 
 - **v0.2.0** — `--fix` with RFC 6902 patches, post-fix re-detection, HexOps `remediation_*` change-control logging.
@@ -68,6 +74,10 @@ OA005 sub-codes: `.a-NON-NPM` (critical), `.b-ORPHANED-OUTER` (high), `.c-ORPHAN
 
 Two long-open pnpm issues ([#9852](https://github.com/pnpm/pnpm/issues/9852), [#5949](https://github.com/pnpm/pnpm/issues/5949)) ask for this functionality in `pnpm audit`. It isn't there yet, and the equivalent doesn't exist for npm either. `override-audit-cli` fills the gap as a focused, dependency-light, local-first tool that any project can adopt.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for project layout, the detector contract, how to add a new rule, and release conventions. The full change history lives in [CHANGELOG.md](CHANGELOG.md).
+
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
