@@ -1,4 +1,5 @@
 import type { Severity } from '../types.js';
+import type { LogLevel } from '../logging/change-control.js';
 
 export class UsageError extends Error {
   constructor(message: string) {
@@ -26,16 +27,25 @@ export interface ParsedArgs {
   dryRun: boolean;
   /** With --fix: skip the post-fix rescan. */
   noPostFixRescan: boolean;
+  /** Externally-supplied attempt id. Replaces the auto-generated one. */
+  attemptId?: string;
+  /** What initiated the run (e.g. "ci", "manual", "scheduled"). */
+  source?: string;
+  /** Advisory id this run is addressing (e.g. "GHSA-xxxx-..."). */
+  advisory?: string;
+  /** Repeatable key=value metadata; threaded onto remediation_attempt. */
+  meta?: Record<string, string>;
+  /** Path to NDJSON change-control log file. */
+  logFile?: string;
+  /** Minimum log level for the change-control file. Default 'info'. */
+  logLevel?: LogLevel;
 }
 
 const VALID_SEVERITIES: Severity[] = ['critical', 'high', 'medium', 'low', 'info'];
-// v0.2.0 brings --fix online; --no-install and the change-control logging
-// flags (--attempt-id, --source, --advisory, --meta, --log-file, --log-level)
-// remain reserved for v0.3.0 (HexOps remediation_* logging).
-const RESERVED_FUTURE = new Set([
-  '--no-install', '--attempt-id', '--source', '--advisory', '--meta',
-  '--log-file', '--log-level',
-]);
+const VALID_LOG_LEVELS: LogLevel[] = ['debug', 'info', 'warn', 'error'];
+// v0.3.0 brings the HexOps change-control logging flags online. --no-install
+// remains reserved (auto-install after --fix is a v0.3.x decision).
+const RESERVED_FUTURE = new Set(['--no-install']);
 
 export function parseArgs(argv: string[]): ParsedArgs {
   const out: ParsedArgs = {
@@ -49,7 +59,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     const a = argv[i]!;
 
     if (RESERVED_FUTURE.has(a)) {
-      throw new UsageError(`Flag ${a} is reserved for v0.3.0 (HexOps change-control logging). See README for roadmap.`);
+      throw new UsageError(`Flag ${a} is reserved for a future release (post-v0.3.0). See README for roadmap.`);
     }
 
     if (a === '-h' || a === '--help') { out.help = true; continue; }
@@ -61,6 +71,48 @@ export function parseArgs(argv: string[]): ParsedArgs {
     if (a === '--fix') { out.fix = true; continue; }
     if (a === '--dry-run') { out.dryRun = true; continue; }
     if (a === '--no-post-fix-rescan') { out.noPostFixRescan = true; continue; }
+
+    if (a === '--attempt-id') {
+      const v = argv[++i];
+      if (!v) throw new UsageError('--attempt-id expects a value');
+      out.attemptId = v;
+      continue;
+    }
+    if (a === '--source') {
+      const v = argv[++i];
+      if (!v) throw new UsageError('--source expects a value (e.g. "ci", "manual")');
+      out.source = v;
+      continue;
+    }
+    if (a === '--advisory') {
+      const v = argv[++i];
+      if (!v) throw new UsageError('--advisory expects a value (e.g. "GHSA-xxxx-...")');
+      out.advisory = v;
+      continue;
+    }
+    if (a === '--meta') {
+      const v = argv[++i];
+      if (!v) throw new UsageError('--meta expects key=value');
+      const eq = v.indexOf('=');
+      if (eq === -1) throw new UsageError(`--meta expects key=value, got ${JSON.stringify(v)}`);
+      out.meta = out.meta ?? {};
+      out.meta[v.slice(0, eq)] = v.slice(eq + 1);
+      continue;
+    }
+    if (a === '--log-file') {
+      const v = argv[++i];
+      if (!v) throw new UsageError('--log-file expects a path');
+      out.logFile = v;
+      continue;
+    }
+    if (a === '--log-level') {
+      const v = argv[++i];
+      if (!v || !VALID_LOG_LEVELS.includes(v as LogLevel)) {
+        throw new UsageError(`--log-level expects one of ${VALID_LOG_LEVELS.join('|')}, got ${JSON.stringify(v)}`);
+      }
+      out.logLevel = v as LogLevel;
+      continue;
+    }
 
     if (a === '--registry-timeout') {
       const v = argv[++i];

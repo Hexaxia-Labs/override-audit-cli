@@ -47,11 +47,11 @@ describe('run (bin entrypoint)', () => {
     expect(s.out.join('')).toContain('FIX');
   });
 
-  it('exits 2 when --log-file is used (reserved for v0.3.0)', async () => {
+  it('exits 2 when --no-install is used (reserved for a future release)', async () => {
     const s = captureStreams();
-    const code = await run(['--log-file', '/tmp/x.log'], { print: s.print, eprint: s.eprint });
+    const code = await run(['--no-install'], { print: s.print, eprint: s.eprint });
     expect(code).toBe(2);
-    expect(s.err.join('')).toContain('v0.3.0');
+    expect(s.err.join('')).toContain('reserved for a future release');
   });
 
   it('prints help and exits 0 for --help', async () => {

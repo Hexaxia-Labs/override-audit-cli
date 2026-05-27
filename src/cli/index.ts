@@ -10,6 +10,7 @@ import { renderJson } from '../output/json.js';
 import { renderHuman } from '../output/human.js';
 import { fix } from '../fixer/fix.js';
 import { SEVERITY_RANK } from '../types.js';
+import { FileLogger, NullLogger, type ChangeControlLogger } from '../logging/change-control.js';
 
 export interface RunIO {
   print: (s: string) => void;
@@ -49,7 +50,10 @@ export async function run(argv: string[], io: RunIO = DEFAULT_IO): Promise<numbe
   if (args.version) { io.print(readToolVersion() + '\n'); return 0; }
 
   const path = args.path ?? process.cwd();
-  const attemptId = `rem_${randomUUID()}`;
+  const attemptId = args.attemptId ?? `rem_${randomUUID()}`;
+  const logger: ChangeControlLogger = args.logFile
+    ? new FileLogger(args.logFile, args.logLevel ?? 'info')
+    : new NullLogger();
 
   let result;
   try {
@@ -75,13 +79,25 @@ export async function run(argv: string[], io: RunIO = DEFAULT_IO): Promise<numbe
 
   // --fix branch: apply patches, optionally rescan, render output with FixReport.
   if (args.fix) {
-    const report = await fix(filteredResult, {
-      dryRun: args.dryRun,
-      rescan: !args.noPostFixRescan,
-      severityFloor: args.severity,
-      ruleFilters: args.ruleFilters,
-      includeSubSuspect: args.includeSubSuspect,
-    }, attemptId);
+    const report = await fix(
+      filteredResult,
+      {
+        dryRun: args.dryRun,
+        rescan: !args.noPostFixRescan,
+        severityFloor: args.severity,
+        ruleFilters: args.ruleFilters,
+        includeSubSuspect: args.includeSubSuspect,
+      },
+      attemptId,
+      logger,
+      {
+        toolVersion: readToolVersion(),
+        source: args.source,
+        advisory: args.advisory,
+        meta: args.meta,
+      },
+    );
+    logger.close();
 
     if (args.json) {
       const out = renderJson(filteredResult, { attemptId, toolVersion: readToolVersion() });
@@ -113,6 +129,7 @@ export async function run(argv: string[], io: RunIO = DEFAULT_IO): Promise<numbe
   } else {
     io.print(renderHuman(filteredResult));
   }
+  logger.close();
 
   return filtered.length > 0 ? 1 : 0;
 }

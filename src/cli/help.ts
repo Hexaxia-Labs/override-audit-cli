@@ -21,10 +21,19 @@ FIX
   --fix                         Apply RFC 6902 patches from detector findings
                                 and rewrite package.json in place. Skips
                                 findings whose remediation is suggest-only
-                                (OA006/OA007/OA008 — they require human review).
+                                (OA008 — requires human review).
   --dry-run                     With --fix: report what would change without
                                 writing to disk. Implies no post-fix rescan.
   --no-post-fix-rescan          With --fix: skip the post-fix verification scan.
+
+CHANGE-CONTROL LOGGING (HexOps)
+  --attempt-id <id>             Externally-supplied attempt id (default: auto).
+  --source <name>               Tag what initiated the run (e.g. "ci", "manual").
+  --advisory <id>               Tie the run to an advisory id (e.g. "GHSA-...").
+  --meta <key=value>            Repeatable freeform metadata; one pair per flag.
+  --log-file <path>             Append NDJSON change-control records to <path>.
+  --log-level <level>           Min level for --log-file: debug|info|warn|error.
+                                Default: info.
 
 OUTPUT
   --json                        Emit JSON OverrideAuditOutput to stdout.
@@ -48,8 +57,8 @@ EXIT CODES
   1   findings present (CI gating)
   2   internal error (bad input, unreadable file, unknown flag)
 
-Coming in v0.3.0: --attempt-id, --source, --advisory, --meta, --log-file,
-                  --log-level  (HexOps change-control logging)
+Coming next: --install / --no-install (auto-run npm install after --fix),
+             HexOps OverrideAuditSource integration (v1.0.0)
 
 Repo: https://github.com/Hexaxia-Labs/override-audit-cli
 `.trim();

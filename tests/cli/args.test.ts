@@ -55,9 +55,29 @@ describe('parseArgs', () => {
     expect(parseArgs(['--no-post-fix-rescan']).noPostFixRescan).toBe(true);
   });
 
-  it('reserved-for-v0.3.0 flags throw a clear UsageError', () => {
-    expect(() => parseArgs(['--attempt-id'])).toThrow(/v0\.3\.0/);
-    expect(() => parseArgs(['--source'])).toThrow(/v0\.3\.0/);
-    expect(() => parseArgs(['--log-file'])).toThrow(/v0\.3\.0/);
+  it('--attempt-id / --source / --advisory parse (v0.3.0+)', () => {
+    const r = parseArgs(['--attempt-id', 'rem_abc', '--source', 'ci', '--advisory', 'GHSA-xxx-yyy']);
+    expect(r.attemptId).toBe('rem_abc');
+    expect(r.source).toBe('ci');
+    expect(r.advisory).toBe('GHSA-xxx-yyy');
+  });
+
+  it('--meta is repeatable, gathered into a Record', () => {
+    const r = parseArgs(['--meta', 'env=prod', '--meta', 'cluster=us-east-1']);
+    expect(r.meta).toEqual({ env: 'prod', cluster: 'us-east-1' });
+  });
+
+  it('--meta without = throws', () => {
+    expect(() => parseArgs(['--meta', 'notkv'])).toThrow(/key=value/);
+  });
+
+  it('--log-file and --log-level parse with validation', () => {
+    expect(parseArgs(['--log-file', '/tmp/x.log']).logFile).toBe('/tmp/x.log');
+    expect(parseArgs(['--log-level', 'warn']).logLevel).toBe('warn');
+    expect(() => parseArgs(['--log-level', 'bogus'])).toThrow(/debug\|info\|warn\|error/);
+  });
+
+  it('--no-install is still reserved for a future release', () => {
+    expect(() => parseArgs(['--no-install'])).toThrow(/reserved for a future release/);
   });
 });

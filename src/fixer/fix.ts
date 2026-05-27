@@ -5,6 +5,15 @@ import { SEVERITY_RANK } from '../types.js';
 import { applyPatches } from './apply.js';
 import { writePackageJson } from './write.js';
 import { scan } from '../scanner.js';
+import { NullLogger, type ChangeControlLogger } from '../logging/change-control.js';
+
+/** Optional change-control logging context, threaded onto records. */
+export interface FixLoggingContext {
+  toolVersion: string;
+  source?: string;
+  advisory?: string;
+  meta?: Record<string, string>;
+}
 
 /**
  * Build a deterministic finding key for cross-scan diffing.
@@ -35,9 +44,29 @@ export async function fix(
   result: ScanResult,
   opts: FixOptions,
   attemptId: string,
+  logger: ChangeControlLogger = new NullLogger(),
+  logCtx: FixLoggingContext = { toolVersion: '0.0.0-unknown' },
 ): Promise<FixReport> {
   const applied: AppliedPatch[] = [];
   const skipped: SkippedForFix[] = [];
+  const baseRecord = {
+    attemptId,
+    tool: 'override-audit-cli' as const,
+    toolVersion: logCtx.toolVersion,
+  };
+
+  // remediation_attempt — emitted once at start, before any patch.
+  logger.log({
+    ...baseRecord,
+    type: 'remediation_attempt',
+    timestamp: new Date().toISOString(),
+    level: 'info',
+    projectPath: result.context.projectPath,
+    source: logCtx.source,
+    advisory: logCtx.advisory,
+    meta: logCtx.meta,
+    dryRun: opts.dryRun,
+  });
 
   const baseDoc = JSON.parse(result.context.packageJsonRaw) as unknown;
   let currentDoc: unknown = baseDoc;
@@ -45,9 +74,14 @@ export async function fix(
   for (const f of result.findings) {
     // Severity floor.
     if (SEVERITY_RANK[f.severity] < SEVERITY_RANK[opts.severityFloor]) {
-      skipped.push({
+      const skipRecord = {
         ruleId: f.ruleId, subRuleId: f.subRuleId, package: f.package,
         reason: `below severity floor (${f.severity} < ${opts.severityFloor})`,
+      };
+      skipped.push(skipRecord);
+      logger.log({
+        ...baseRecord, type: 'remediation_skipped', timestamp: new Date().toISOString(),
+        level: 'debug', ...skipRecord,
       });
       continue;
     }
@@ -56,18 +90,28 @@ export async function fix(
     const baseCode = f.ruleId.split('-')[0]!;
     const subCode = f.subRuleId?.split('-')[0];
     if (opts.ruleFilters.get(baseCode) === false || (subCode && opts.ruleFilters.get(subCode) === false)) {
-      skipped.push({
+      const skipRecord = {
         ruleId: f.ruleId, subRuleId: f.subRuleId, package: f.package,
         reason: 'filtered by --rule',
+      };
+      skipped.push(skipRecord);
+      logger.log({
+        ...baseRecord, type: 'remediation_skipped', timestamp: new Date().toISOString(),
+        level: 'debug', ...skipRecord,
       });
       continue;
     }
 
     // OA005.e is info-level — only fix it when includeSubSuspect is set.
     if (f.subRuleId === 'OA005.e-SUSPECT' && !opts.includeSubSuspect) {
-      skipped.push({
+      const skipRecord = {
         ruleId: f.ruleId, subRuleId: f.subRuleId, package: f.package,
         reason: 'OA005.e-SUSPECT excluded by default; pass --include-sub-suspect to fix',
+      };
+      skipped.push(skipRecord);
+      logger.log({
+        ...baseRecord, type: 'remediation_skipped', timestamp: new Date().toISOString(),
+        level: 'debug', ...skipRecord,
       });
       continue;
     }
@@ -81,9 +125,14 @@ export async function fix(
           : [];
 
     if (patches.length === 0) {
-      skipped.push({
+      const skipRecord = {
         ruleId: f.ruleId, subRuleId: f.subRuleId, package: f.package,
         reason: `${f.remediation.action}-only (no automated patch)`,
+      };
+      skipped.push(skipRecord);
+      logger.log({
+        ...baseRecord, type: 'remediation_skipped', timestamp: new Date().toISOString(),
+        level: 'info', ...skipRecord,
       });
       continue;
     }
@@ -91,15 +140,28 @@ export async function fix(
     // Apply.
     try {
       currentDoc = applyPatches(currentDoc, patches);
-      applied.push({
+      const appliedRecord = {
         ruleId: f.ruleId, subRuleId: f.subRuleId, package: f.package,
         patch: patches[0]!,
         patches,
+      };
+      applied.push(appliedRecord);
+      logger.log({
+        ...baseRecord, type: 'remediation_applied', timestamp: new Date().toISOString(),
+        level: 'info',
+        ruleId: f.ruleId, subRuleId: f.subRuleId, package: f.package, patches,
       });
     } catch (err) {
+      const failureReason = `patch failed to apply: ${(err as Error).message}`;
       skipped.push({
         ruleId: f.ruleId, subRuleId: f.subRuleId, package: f.package,
-        reason: `patch failed to apply: ${(err as Error).message}`,
+        reason: failureReason,
+      });
+      logger.log({
+        ...baseRecord, type: 'remediation_failed', timestamp: new Date().toISOString(),
+        level: 'error',
+        ruleId: f.ruleId, subRuleId: f.subRuleId, package: f.package,
+        error: (err as Error).message,
       });
     }
   }
@@ -130,6 +192,26 @@ export async function fix(
     remainingFindings = postFiltered;
     newFindings = postFiltered.filter(f => !preKeys.has(findingKey(f)));
   }
+
+  // remediation_complete — final summary record. Exit code is computed by the
+  // CLI; we pass the apparent code based on outcomes so consumers can read it
+  // from the log without needing to know the CLI's exact mapping.
+  const apparentExit: 0 | 1 | 2 =
+    (remainingFindings && remainingFindings.length > 0) || newFindings.length > 0 ? 1 : 0;
+  logger.log({
+    ...baseRecord,
+    type: 'remediation_complete',
+    timestamp: new Date().toISOString(),
+    level: 'info',
+    summary: {
+      applied: applied.length,
+      skipped: skipped.length,
+      failed: skipped.filter(s => s.reason.startsWith('patch failed to apply')).length,
+      remainingFindings: remainingFindings ? remainingFindings.length : null,
+      newFindings: newFindings.length,
+    },
+    exitCode: apparentExit,
+  });
 
   return {
     attemptId,

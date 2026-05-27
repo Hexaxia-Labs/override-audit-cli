@@ -17,7 +17,10 @@ describe('HELP_TEXT', () => {
     expect(HELP_TEXT).toContain('--dry-run');
     expect(HELP_TEXT).toContain('--no-post-fix-rescan');
   });
-  it('signals that change-control logging flags are coming in v0.3.0', () => {
-    expect(HELP_TEXT).toMatch(/v0\.3\.0/);
+  it('documents the CHANGE-CONTROL LOGGING section (v0.3.0+)', () => {
+    expect(HELP_TEXT).toContain('CHANGE-CONTROL LOGGING');
+    for (const flag of ['--attempt-id', '--source', '--advisory', '--meta', '--log-file', '--log-level']) {
+      expect(HELP_TEXT).toContain(flag);
+    }
   });
 });

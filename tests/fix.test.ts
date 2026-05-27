@@ -1,5 +1,6 @@
 import { fix } from '../src/fixer/fix.js';
 import { scan } from '../src/scanner.js';
+import { MemoryLogger } from '../src/logging/change-control.js';
 import { mkdirSync, rmSync, writeFileSync, readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -144,6 +145,45 @@ describe('fix orchestrator', () => {
     const after = JSON.parse(readFileSync(join(TMP, 'package.json'), 'utf-8'));
     expect(after.overrides['@esbuild/linux-x64']).toBeUndefined();
     expect(after.overrides.esbuild).toBe('>=0.28.0');
+  });
+
+  it('emits change-control records: attempt → applied → complete', async () => {
+    const path = setupFixture({
+      name: 'fix-test', version: '0.0.0',
+      overrides: { 'gone-pkg': '1.0.0' },
+    });
+    const before = await scan(path);
+    const logger = new MemoryLogger();
+
+    await fix(before, {
+      dryRun: false, rescan: false, severityFloor: 'info',
+      ruleFilters: new Map(), includeSubSuspect: false,
+    }, 'rem_test-cc', logger, {
+      toolVersion: '0.3.0',
+      source: 'unit-test',
+      advisory: 'GHSA-test',
+      meta: { ticket: 'X-123' },
+    });
+
+    const types = logger.records.map(r => r.type);
+    expect(types[0]).toBe('remediation_attempt');
+    expect(types[types.length - 1]).toBe('remediation_complete');
+    expect(types).toContain('remediation_applied');
+
+    const attempt = logger.records.find(r => r.type === 'remediation_attempt')!;
+    expect((attempt as any).source).toBe('unit-test');
+    expect((attempt as any).advisory).toBe('GHSA-test');
+    expect((attempt as any).meta).toEqual({ ticket: 'X-123' });
+
+    const applied = logger.records.find(r => r.type === 'remediation_applied')!;
+    expect((applied as any).package).toBe('gone-pkg');
+    expect((applied as any).patches).toHaveLength(1);
+    expect((applied as any).patches[0].op).toBe('remove');
+
+    const complete = logger.records.find(r => r.type === 'remediation_complete')!;
+    expect((complete as any).summary.applied).toBe(1);
+    expect((complete as any).summary.failed).toBe(0);
+    expect((complete as any).exitCode).toBe(0);
   });
 
   it('respects severity floor — skips findings below it', async () => {

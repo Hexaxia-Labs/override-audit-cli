@@ -42,9 +42,9 @@ describe('CLI integration', () => {
     expect(r.stdout).toContain('DRY RUN');
   });
 
-  it('exits 2 on --log-file (reserved for v0.3.0)', () => {
-    const r = runBin(['--log-file', '/tmp/x.log']);
+  it('exits 2 on --no-install (still reserved post-v0.3.0)', () => {
+    const r = runBin(['--no-install']);
     expect(r.status).toBe(2);
-    expect(r.stderr).toContain('v0.3.0');
+    expect(r.stderr).toContain('reserved for a future release');
   });
 });

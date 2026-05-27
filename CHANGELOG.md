@@ -8,6 +8,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing yet. See the [roadmap in README.md](README.md#roadmap) for what's next.
 
+## [0.3.0] — 2026-05-27
+
+Ships HexOps change-control logging. Every `--fix` run can now emit a structured NDJSON stream of remediation lifecycle records — designed for HexOps' (and any other orchestrator's) audit trail.
+
+### Added
+- **`--log-file <path>`** — append NDJSON change-control records to `<path>`. One record per line, valid JSON.
+- **`--log-level <level>`** — `debug` / `info` / `warn` / `error`. Default `info`. Filters records below the threshold.
+- **`--attempt-id <id>`** — externally-supplied attempt ID (defaults to auto-generated `rem_<uuid>`). Threads through every record.
+- **`--source <name>`** — what initiated the run (`ci`, `manual`, `scheduled`, etc.).
+- **`--advisory <id>`** — link the run to an advisory (e.g. `GHSA-xxxx-...`).
+- **`--meta <key=value>`** — repeatable freeform metadata; gathered into a `Record<string, string>` on `remediation_attempt`.
+- `src/logging/change-control.ts` — NDJSON file logger, null logger, in-memory test logger.
+- Five record types: `remediation_attempt`, `remediation_applied`, `remediation_failed`, `remediation_skipped`, `remediation_complete`.
+- Fix orchestrator emits the full lifecycle when a logger is passed.
+- 11 new tests covering logger behavior + record emission.
+
+### Changed
+- `--no-install` is now the only flag still reserved (deferred — auto-install after `--fix` is a v0.3.x decision).
+- Help text gains a CHANGE-CONTROL LOGGING section.
+
+### Dogfood verification
+```bash
+override-audit --fix --with-registry \
+  --attempt-id rem_dogfood-030 --source ci \
+  --advisory GHSA-fake-2026-001 \
+  --meta repo=hexmetrics --meta runner=local \
+  --log-file /tmp/cc.log /tmp/hexmetrics
+```
+Produces a 6-line NDJSON stream covering attempt → 3 applied → 1 failed → complete, including the full RFC 6902 ops for each applied patch and the failure reason for the one that didn't land.
+
+### Notes
+- 200 tests across 30 suites, all passing.
+- No schema break — `--fix` runs without `--log-file` behave identically to v0.2.1.
+- Change-control logging is gated on `--log-file` — detect-only runs and `--fix` runs without the flag emit nothing.
+
 ## [0.2.1] — 2026-05-27
 
 Upgrades OA006 and OA007 from `suggest`-only to genuinely fixable. The `--fix` flow now closes the dogfood loop end-to-end: the tool that *discovered* the parent-override pattern can now *apply* it.
@@ -134,7 +169,8 @@ Initial release. **Detection only**; `--fix` lands in `v0.2.0`.
 - No color output yet (tracked in [#4](https://github.com/Hexaxia-Labs/override-audit-cli/issues/4)).
 - `OA005.e-SUSPECT` is info-level and filtered from output unless `--include-sub-suspect --severity info`.
 
-[Unreleased]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.1.1...v0.1.2
