@@ -1,0 +1,7 @@
+src/
+tests/
+docs/
+.github/
+tsconfig.json
+jest.config.mjs
+*.log
