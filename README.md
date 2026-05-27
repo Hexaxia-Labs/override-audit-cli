@@ -1,7 +1,7 @@
 # override-audit-cli
 
-[![version](https://img.shields.io/badge/version-v0.1.2-blue)](CHANGELOG.md)
-[![tests](https://img.shields.io/badge/tests-160%20passing-43853d?logo=jest&logoColor=white)](#)
+[![version](https://img.shields.io/badge/version-v0.2.0-blue)](CHANGELOG.md)
+[![tests](https://img.shields.io/badge/tests-182%20passing-43853d?logo=jest&logoColor=white)](#)
 [![detectors](https://img.shields.io/badge/detectors-8-43853d)](docs/rules/)
 [![node](https://img.shields.io/badge/node-%E2%89%A518-43853d?logo=node.js&logoColor=white)](https://nodejs.org)
 [![typescript](https://img.shields.io/badge/typescript-5.x-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
@@ -17,7 +17,7 @@ Hygiene auditor for npm and pnpm package `overrides` blocks.
 - **Surpassed pins** — the installed version is already newer than your concrete pin.
 - **Ineffective nested overrides** — the npm-only `{ parent: { inner: ver } }` shape, with five sub-conditions covering non-npm, orphaned outer, orphaned inner, leaky, and stylistic-suspect cases.
 
-**Status:** `v0.1.0` — detection only. `--fix` lands in `v0.2.0`. HexOps `ScanSource` integration lands in `v1.0.0`.
+**Status:** `v0.2.0` — detect + fix. HexOps `ScanSource` integration lands in `v1.0.0`.
 
 ## Install
 
@@ -40,6 +40,8 @@ override-audit --json                # JSON output (for CI / orchestrators)
 override-audit --severity high       # only high+/critical findings (CI gate friendly)
 override-audit --rule OA005.e=off    # silence info-level "suspect" nested findings
 override-audit --with-registry       # enable OA007 frozen-latest (needs network)
+override-audit --fix --dry-run       # preview what --fix would change
+override-audit --fix                 # apply RFC 6902 patches, rewrite package.json, rescan
 ```
 
 ## Exit codes
@@ -71,10 +73,11 @@ Per-rule reference docs live in [`docs/rules/`](docs/rules/).
 
 ## Roadmap
 
-- **v0.2.0** — `--fix` with RFC 6902 patches, post-fix re-detection, HexOps `remediation_*` change-control logging.
+- **v0.3.0** — HexOps `remediation_*` change-control logging (`--attempt-id`, `--source`, `--advisory`, `--meta`, `--log-file`, `--log-level`).
+- **v0.2.x** — OA006/OA007 emit real multi-op fix patches (currently `suggest`-only).
 - **v1.0.0** — HexOps `OverrideAuditSource` integration (consumed as the fourth `ScanSource` alongside cve-lite, grype, pnpm-audit).
 - **v1.1.0** — yarn `resolutions` support; optional GitHub Action wrapper.
-- **v2.0** — bun overrides; optional `--with-registry` for deprecated-parent detection.
+- **v2.0** — bun overrides; optional registry-driven deprecated-parent detection.
 
 ## Why this exists
 

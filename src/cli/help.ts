@@ -17,6 +17,15 @@ DETECTION
                                 Off by default — runs are local-only.
   --registry-timeout <ms>       Per-request timeout for registry calls. Default 5000.
 
+FIX
+  --fix                         Apply RFC 6902 patches from detector findings
+                                and rewrite package.json in place. Skips
+                                findings whose remediation is suggest-only
+                                (OA006/OA007/OA008 — they require human review).
+  --dry-run                     With --fix: report what would change without
+                                writing to disk. Implies no post-fix rescan.
+  --no-post-fix-rescan          With --fix: skip the post-fix verification scan.
+
 OUTPUT
   --json                        Emit JSON OverrideAuditOutput to stdout.
   --no-color                    Reserved for future color support.
@@ -39,8 +48,8 @@ EXIT CODES
   1   findings present (CI gating)
   2   internal error (bad input, unreadable file, unknown flag)
 
-Coming in v0.2.0: --fix, --dry-run, --attempt-id, --source, --log-file
-                  (auto-rewrite of package.json + change-control logging)
+Coming in v0.3.0: --attempt-id, --source, --advisory, --meta, --log-file,
+                  --log-level  (HexOps change-control logging)
 
 Repo: https://github.com/Hexaxia-Labs/override-audit-cli
 `.trim();

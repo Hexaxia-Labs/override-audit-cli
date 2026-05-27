@@ -8,6 +8,7 @@ import { HELP_TEXT } from './help.js';
 import { scan } from '../scanner.js';
 import { renderJson } from '../output/json.js';
 import { renderHuman } from '../output/human.js';
+import { fix } from '../fixer/fix.js';
 import { SEVERITY_RANK } from '../types.js';
 
 export interface RunIO {
@@ -72,6 +73,40 @@ export async function run(argv: string[], io: RunIO = DEFAULT_IO): Promise<numbe
   });
   const filteredResult = { ...result, findings: filtered };
 
+  // --fix branch: apply patches, optionally rescan, render output with FixReport.
+  if (args.fix) {
+    const report = await fix(filteredResult, {
+      dryRun: args.dryRun,
+      rescan: !args.noPostFixRescan,
+      severityFloor: args.severity,
+      ruleFilters: args.ruleFilters,
+      includeSubSuspect: args.includeSubSuspect,
+    }, attemptId);
+
+    if (args.json) {
+      const out = renderJson(filteredResult, { attemptId, toolVersion: readToolVersion() });
+      out.fix = report;
+      io.print(JSON.stringify(out, null, 2) + '\n');
+    } else {
+      io.print(renderHuman(filteredResult));
+      io.print(renderFixSummary(report));
+    }
+
+    // Exit code:
+    //   0 — clean post-fix (rescan happened and produced no findings, or dry-run with patches available)
+    //   1 — findings remain after fix (rescan saw remaining or fix introduced new findings)
+    //   0 — no findings at all (nothing to do)
+    if (args.dryRun) return report.appliedPatches.length > 0 ? 0 : (filtered.length > 0 ? 1 : 0);
+    if (report.remainingFindings === null) {
+      // No rescan — base exit on whether patches were applied AND no findings remain skipped
+      return report.skippedFindings.length === 0 ? 0 : 1;
+    }
+    const remainingAboveFloor = report.remainingFindings.filter(
+      f => SEVERITY_RANK[f.severity] >= SEVERITY_RANK[args.severity],
+    );
+    return (remainingAboveFloor.length > 0 || report.newFindings.length > 0) ? 1 : 0;
+  }
+
   if (args.json) {
     const out = renderJson(filteredResult, { attemptId, toolVersion: readToolVersion() });
     io.print(JSON.stringify(out, null, 2) + '\n');
@@ -80,6 +115,32 @@ export async function run(argv: string[], io: RunIO = DEFAULT_IO): Promise<numbe
   }
 
   return filtered.length > 0 ? 1 : 0;
+}
+
+function renderFixSummary(report: { dryRun: boolean; appliedPatches: { ruleId: string; package: string }[]; skippedFindings: { ruleId: string; package: string; reason: string }[]; remainingFindings: unknown[] | null; newFindings: unknown[] }): string {
+  const lines: string[] = [];
+  lines.push('');
+  lines.push(`${report.dryRun ? 'DRY RUN' : 'FIX'} — ${report.appliedPatches.length} patch${report.appliedPatches.length === 1 ? '' : 'es'} applied${report.dryRun ? ' (no file written)' : ''}`);
+  for (const p of report.appliedPatches) {
+    lines.push(`  ✓ ${p.ruleId.split('-')[0]}  ${p.package}`);
+  }
+  if (report.skippedFindings.length > 0) {
+    lines.push(`  ${report.skippedFindings.length} skipped (need human review):`);
+    for (const s of report.skippedFindings) {
+      lines.push(`    · ${s.ruleId.split('-')[0]}  ${s.package}  (${s.reason})`);
+    }
+  }
+  if (report.remainingFindings !== null) {
+    if (report.remainingFindings.length === 0) {
+      lines.push('  ✓ Post-fix rescan: clean');
+    } else {
+      lines.push(`  ⚠ Post-fix rescan: ${report.remainingFindings.length} finding(s) remain`);
+    }
+  }
+  if (report.newFindings.length > 0) {
+    lines.push(`  ⚠ Fix introduced ${report.newFindings.length} new finding(s) — investigate`);
+  }
+  return lines.join('\n') + '\n';
 }
 
 // Direct execution (not under jest).

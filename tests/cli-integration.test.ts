@@ -36,9 +36,15 @@ describe('CLI integration', () => {
     expect(r.stderr).toContain('Unknown flag');
   });
 
-  it('exits 2 on --fix (reserved for v0.2.0)', () => {
-    const r = runBin(['--fix', F('scanner-clean')]);
+  it('exits 0 on --fix --dry-run against a clean project (nothing to apply)', () => {
+    const r = runBin(['--fix', '--dry-run', F('scanner-clean')]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('DRY RUN');
+  });
+
+  it('exits 2 on --log-file (reserved for v0.3.0)', () => {
+    const r = runBin(['--log-file', '/tmp/x.log']);
     expect(r.status).toBe(2);
-    expect(r.stderr).toContain('v0.2.0');
+    expect(r.stderr).toContain('v0.3.0');
   });
 });

@@ -63,6 +63,45 @@ export interface Summary {
   byRule: Record<string, number>;
 }
 
+export interface AppliedPatch {
+  ruleId: RuleId;
+  subRuleId?: SubRuleId;
+  package: string;
+  patch: RFC6902Patch;
+}
+
+export interface SkippedForFix {
+  ruleId: RuleId;
+  subRuleId?: SubRuleId;
+  package: string;
+  reason: string;
+}
+
+export interface FixReport {
+  /** Same attemptId as the parent OverrideAuditOutput.attemptId — threads through the run. */
+  attemptId: string;
+  /** ISO timestamp of when fix() ran. */
+  appliedAt: string;
+  /** When true, no file writes occurred. */
+  dryRun: boolean;
+  /** Patches that were (or would be, when dryRun) applied. */
+  appliedPatches: AppliedPatch[];
+  /** Findings that had no auto-applicable patch (suggest-only, below severity, rule-filtered, etc.). */
+  skippedFindings: SkippedForFix[];
+  /** Post-fix re-scan output; null when --no-post-fix-rescan was passed. */
+  remainingFindings: Finding[] | null;
+  /** Findings that did not exist pre-fix but appeared post-fix (regressions). */
+  newFindings: Finding[];
+}
+
+export interface FixOptions {
+  dryRun: boolean;
+  rescan: boolean;
+  severityFloor: Severity;
+  ruleFilters: Map<string, boolean>;
+  includeSubSuspect: boolean;
+}
+
 export interface OverrideAuditOutput {
   schemaVersion: '1';
   tool: 'override-audit-cli';
@@ -74,7 +113,8 @@ export interface OverrideAuditOutput {
   summary: Summary;
   findings: Finding[];
   skippedDetectors?: { ruleId: RuleId; reason: string }[];
-  // fix?: FixReport — populated in Plan 2 only.
+  /** Populated only when run with --fix. Additive — v0.1.x consumers can ignore. */
+  fix?: FixReport;
 }
 
 /** A package.json override entry as parsed (preserves nested shape). */

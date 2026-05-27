@@ -20,12 +20,21 @@ export interface ParsedArgs {
   withRegistry: boolean;
   /** Registry timeout in ms (used with --with-registry). */
   registryTimeoutMs?: number;
+  /** Apply RFC 6902 patches from detector findings and rewrite package.json. */
+  fix: boolean;
+  /** With --fix: report what would happen without writing to disk. */
+  dryRun: boolean;
+  /** With --fix: skip the post-fix rescan. */
+  noPostFixRescan: boolean;
 }
 
 const VALID_SEVERITIES: Severity[] = ['critical', 'high', 'medium', 'low', 'info'];
-const RESERVED_PLAN2 = new Set([
-  '--fix', '--dry-run', '--no-install', '--no-post-fix-rescan',
-  '--attempt-id', '--source', '--advisory', '--meta', '--log-file', '--log-level',
+// v0.2.0 brings --fix online; --no-install and the change-control logging
+// flags (--attempt-id, --source, --advisory, --meta, --log-file, --log-level)
+// remain reserved for v0.3.0 (HexOps remediation_* logging).
+const RESERVED_FUTURE = new Set([
+  '--no-install', '--attempt-id', '--source', '--advisory', '--meta',
+  '--log-file', '--log-level',
 ]);
 
 export function parseArgs(argv: string[]): ParsedArgs {
@@ -33,13 +42,14 @@ export function parseArgs(argv: string[]): ParsedArgs {
     json: false, severity: 'low', ruleFilters: new Map(),
     includeSubSuspect: false, help: false, version: false, noColor: false,
     withRegistry: false,
+    fix: false, dryRun: false, noPostFixRescan: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
 
-    if (RESERVED_PLAN2.has(a)) {
-      throw new UsageError(`Flag ${a} is reserved for v0.2.0 (Fix). Detection-only release. See README for roadmap.`);
+    if (RESERVED_FUTURE.has(a)) {
+      throw new UsageError(`Flag ${a} is reserved for v0.3.0 (HexOps change-control logging). See README for roadmap.`);
     }
 
     if (a === '-h' || a === '--help') { out.help = true; continue; }
@@ -48,6 +58,9 @@ export function parseArgs(argv: string[]): ParsedArgs {
     if (a === '--no-color') { out.noColor = true; continue; }
     if (a === '--include-sub-suspect') { out.includeSubSuspect = true; continue; }
     if (a === '--with-registry') { out.withRegistry = true; continue; }
+    if (a === '--fix') { out.fix = true; continue; }
+    if (a === '--dry-run') { out.dryRun = true; continue; }
+    if (a === '--no-post-fix-rescan') { out.noPostFixRescan = true; continue; }
 
     if (a === '--registry-timeout') {
       const v = argv[++i];

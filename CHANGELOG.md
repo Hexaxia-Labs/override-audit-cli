@@ -8,6 +8,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing yet. See the [roadmap in README.md](README.md#roadmap) for what's next.
 
+## [0.2.0] — 2026-05-27
+
+Ships `--fix`. The tool now rewrites `package.json` in place to apply the RFC 6902 patches detectors emit — moving from detection-only to detect-and-fix in the same flow.
+
+### Added
+- **`--fix`** — apply the RFC 6902 patches emitted by detector findings and rewrite `package.json` atomically (tmp file + rename). Preserves the original indent and trailing-newline style.
+- **`--dry-run`** — with `--fix`, report what would change without writing to disk. Implies no post-fix rescan.
+- **`--no-post-fix-rescan`** — with `--fix`, skip the post-fix verification scan.
+- **Post-fix verification** — after applying patches, re-runs the scanner against the modified `package.json` and reports any remaining findings or new findings (regressions).
+- **`FixReport`** in `OverrideAuditOutput.fix` — populated when `--fix` is used. Includes `appliedPatches`, `skippedFindings` (suggest-only / below-severity / filtered), `remainingFindings` (post-rescan), and `newFindings` (regressions).
+- `src/fixer/apply.ts` — RFC 6902 applier supporting `remove`/`replace`/`move`/`add`. Auto-creates intermediate objects on `add`/`move` so OA003's pnpm.overrides → overrides move works on projects that never had a top-level overrides block.
+- `src/fixer/write.ts` — indent detection (2-space / 4-space / tab) and atomic write.
+- `src/fixer/fix.ts` — orchestrator: filter findings → apply patches → write → rescan → diff.
+- Eight new tests covering apply ops, format-preserving write, and orchestrator-level scenarios (dry-run, severity floor, suggest-only skipping).
+- Human renderer now prints a FIX summary section under `--fix` showing applied patches, skipped findings, and rescan outcome.
+
+### Changed
+- `--fix`, `--dry-run`, and `--no-post-fix-rescan` are no longer reserved — they work.
+- Help text gains a FIX section.
+- Reserved-for-future flag set now contains only the v0.3.0 HexOps change-control logging flags (`--attempt-id`, `--source`, `--advisory`, `--meta`, `--log-file`, `--log-level`, `--no-install`).
+- Per-rule docs: `--fix` references are now real, not "coming in v0.2.0".
+
+### Notes
+- Schema is unchanged. `OverrideAuditOutput.fix` is additive and only populated under `--fix`.
+- OA006, OA007, and OA008 stay `suggest`-only — their fixes require multi-op patches (deferred follow-up).
+- HexOps change-control logging deferred to v0.3.0.
+- 182 tests across 29 suites, all passing.
+- Dogfooded on a copy of the hexmetrics-real-world fixture: `"@esbuild/linux-x64": "latest"` → `">=0.25.12"`, post-fix rescan clean, exit 0.
+
 ## [0.1.2] — 2026-05-27
 
 Refines OA006 severity per the v0.1.1 dogfood discovery (issue [#8](https://github.com/Hexaxia-Labs/override-audit-cli/issues/8)). v0.1.1 was emitting `high` uniformly even when the override pattern was currently effective; that produced false-urgency on common range-override-vs-exact-pin cases like `postcss: "^8.5.15"` against `next`'s `postcss: "8.4.31"`.
@@ -73,7 +102,8 @@ Initial release. **Detection only**; `--fix` lands in `v0.2.0`.
 - No color output yet (tracked in [#4](https://github.com/Hexaxia-Labs/override-audit-cli/issues/4)).
 - `OA005.e-SUSPECT` is info-level and filtered from output unless `--include-sub-suspect --severity info`.
 
-[Unreleased]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/Hexaxia-Labs/override-audit-cli/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Hexaxia-Labs/override-audit-cli/releases/tag/v0.1.0

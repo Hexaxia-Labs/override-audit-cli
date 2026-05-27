@@ -49,8 +49,15 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--nonsense'])).toThrow(UsageError);
   });
 
-  it('reserved-for-plan-2 flags throw a clear UsageError', () => {
-    expect(() => parseArgs(['--fix'])).toThrow(/v0\.2\.0/);
-    expect(() => parseArgs(['--dry-run'])).toThrow(/v0\.2\.0/);
+  it('--fix / --dry-run / --no-post-fix-rescan parse correctly (v0.2.0+)', () => {
+    expect(parseArgs(['--fix']).fix).toBe(true);
+    expect(parseArgs(['--dry-run']).dryRun).toBe(true);
+    expect(parseArgs(['--no-post-fix-rescan']).noPostFixRescan).toBe(true);
+  });
+
+  it('reserved-for-v0.3.0 flags throw a clear UsageError', () => {
+    expect(() => parseArgs(['--attempt-id'])).toThrow(/v0\.3\.0/);
+    expect(() => parseArgs(['--source'])).toThrow(/v0\.3\.0/);
+    expect(() => parseArgs(['--log-file'])).toThrow(/v0\.3\.0/);
   });
 });

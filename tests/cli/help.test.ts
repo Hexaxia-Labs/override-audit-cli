@@ -11,7 +11,13 @@ describe('HELP_TEXT', () => {
       expect(HELP_TEXT).toContain(code);
     }
   });
-  it('signals that --fix is coming in v0.2.0', () => {
-    expect(HELP_TEXT).toMatch(/v0\.2\.0/);
+  it('documents the FIX section and the now-shipped --fix flag', () => {
+    expect(HELP_TEXT).toMatch(/FIX\b/);
+    expect(HELP_TEXT).toContain('--fix');
+    expect(HELP_TEXT).toContain('--dry-run');
+    expect(HELP_TEXT).toContain('--no-post-fix-rescan');
+  });
+  it('signals that change-control logging flags are coming in v0.3.0', () => {
+    expect(HELP_TEXT).toMatch(/v0\.3\.0/);
   });
 });
