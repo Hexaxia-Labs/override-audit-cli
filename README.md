@@ -1,11 +1,11 @@
 # override-audit-cli
 
-[![CI](https://img.shields.io/github/actions/workflow/status/Hexaxia-Labs/override-audit-cli/ci.yml?branch=main&label=CI)](https://github.com/Hexaxia-Labs/override-audit-cli/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/Hexaxia-Labs/override-audit-cli?include_prereleases&sort=semver&display_name=tag)](https://github.com/Hexaxia-Labs/override-audit-cli/releases)
-[![Node](https://img.shields.io/badge/node-%E2%89%A518-43853d?logo=node.js&logoColor=white)](https://nodejs.org)
-[![TypeScript](https://img.shields.io/badge/typescript-5.x-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![License](https://img.shields.io/github/license/Hexaxia-Labs/override-audit-cli)](LICENSE)
-[![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-fa6673?logo=conventionalcommits&logoColor=white)](https://www.conventionalcommits.org)
+[![version](https://img.shields.io/badge/version-v0.1.2-blue)](CHANGELOG.md)
+[![tests](https://img.shields.io/badge/tests-160%20passing-43853d?logo=jest&logoColor=white)](#)
+[![detectors](https://img.shields.io/badge/detectors-8-43853d)](docs/rules/)
+[![node](https://img.shields.io/badge/node-%E2%89%A518-43853d?logo=node.js&logoColor=white)](https://nodejs.org)
+[![typescript](https://img.shields.io/badge/typescript-5.x-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![license](https://img.shields.io/badge/license-MIT-43853d)](LICENSE)
 
 Hygiene auditor for npm and pnpm package `overrides` blocks.
 
