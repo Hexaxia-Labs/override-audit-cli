@@ -18,6 +18,15 @@ describe('readLockfilePackages', () => {
     expect(names.has('react')).toBe(true);
   });
 
+  it('extracts package names from pnpm v9 lockfile (quoted scoped + unquoted bare, peer-disambiguated keys)', () => {
+    const names = readLockfilePackages(F('lockfile-pnpm-v9'), 'pnpm');
+    expect(names.has('@alloc/quick-lru')).toBe(true);
+    expect(names.has('@biomejs/biome')).toBe(true);
+    expect(names.has('@radix-ui/react-dialog')).toBe(true);
+    expect(names.has('accepts')).toBe(true);
+    expect(names.has('ajv')).toBe(true);
+  });
+
   it('returns empty Set when lockfile missing (graceful)', () => {
     const names = readLockfilePackages(F('lockfile-missing'), 'npm');
     expect(names.size).toBe(0);

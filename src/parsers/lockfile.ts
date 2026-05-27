@@ -42,9 +42,12 @@ function readPnpmLockfile(projectPath: string): Set<string> {
   if (!existsSync(path)) return new Set();
   const text = readFileSync(path, 'utf-8');
   const names = new Set<string>();
-  // pnpm-lock.yaml entries under `packages:` start with "  /<name>@<version>:".
-  // Avoids pulling in a YAML parser for v1's needs.
-  const re = /^\s+\/((?:@[^/]+\/)?[^@/\s]+)@/gm;
+  // Handles three pnpm-lock formats without pulling in a YAML parser:
+  //   v6:           "  /postcss@8.5.15:"          or "  /@scope/pkg@1.0.0:"
+  //   v9 quoted:    "  '@scope/pkg@1.0.0':"        (scoped names quoted)
+  //   v9 unquoted:  "  pkg@1.0.0:"                 (bare names)
+  // Optional leading quote or slash; then optional @scope/ then name; then @version.
+  const re = /^\s+['"/]?((?:@[^/'"\s]+\/)?[^@/\s'"]+)@/gm;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     if (m[1]) names.add(m[1]);
