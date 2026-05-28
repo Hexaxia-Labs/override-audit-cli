@@ -4,7 +4,9 @@
 
 **Goal:** Add the `cve-lite overrides [path] [flags]` subcommand, hook `verify()` into the existing `--fix` flow for OA-applied patches, and introduce exit code `2` for "fix applied but did not take." After this plan, the merged CLI is usable end-to-end on a real project: `cve-lite overrides` runs the full audit, and `cve-lite [path] --fix` applies OA fixes and verifies them automatically.
 
-**Architecture:** `src/cli/args.ts` gains a third subcommand branch (joining `advisories sync` and `install-skill`) and the existing positional scan branch grows two new flags (`--audit-log`, `--check-overrides`). The subcommand entry lives at `src/cli/commands/overrides.ts` and reads from `src/overrides/api.ts`. `--fix` integration happens inside `src/index.ts` at the same point the existing CVE fix-command plan is built: after the existing plan, we additionally run an OA audit, apply rfc6902 fixes for any OA finding that has one, then verify those targets. CVE fix commands (still emitted, not applied) are unaffected.
+**Architecture:** `src/cli/args.ts` gains a third subcommand branch (joining `advisories sync` and `install-skill`) and the existing positional scan branch grows two new flags (`--audit-log`, `--check-overrides`). The subcommand entry lives at `src/cli/commands/overrides.ts` and reads from `src/overrides/api.ts`.
+
+`--fix` integration sits **after** cve-lite's existing CVE-fix pipeline. Per `website/docs/fix-mode.md`, cve-lite's `--fix` today shells out to the package manager (`npm install` / `pnpm add` / `yarn add`) and rescans. By the time our hook runs, the on-disk state has already changed: vulnerable packages may be upgraded, `node_modules/` is fresh, and `package.json` may have been touched by the package manager. Our hook then (1) audits overrides against that new state, (2) applies RFC 6902 patches for any OA finding with an auto-fix, (3) runs `verify()` over the union of CVE-touched and OA-touched packages, and (4) exits `2` if verify fails. Verifying CVE-touched packages via OA001/OA008 is what catches "package manager reported success but a vulnerable copy is still nested under a parent dep."
 
 **Tech Stack:** TypeScript. No new runtime deps.
 
@@ -401,7 +403,7 @@ git commit -m "feat(cli): dispatch overrides command from src/index.ts"
 
 ## Task 5: `--fix` integration for scan path
 
-When `cve-lite [path] --fix` runs against a project with overrides, OA fixes apply automatically and verify runs. Hook lives in `src/cli/fix-overrides-hook.ts` and is invoked from `src/index.ts` after the existing CVE fix-command plan is built.
+When `cve-lite [path] --fix` runs, cve-lite's existing pipeline already applies CVE fixes via the package manager and rescans. After that completes, our hook runs: it audits overrides against the new on-disk state, applies any OA RFC 6902 patches, and verifies the union of CVE-touched and OA-touched targets. Hook lives in `src/cli/fix-overrides-hook.ts` and is invoked from `src/index.ts` as the final step of the `--fix` path.
 
 **Files:**
 - Create: `src/cli/fix-overrides-hook.ts`
@@ -470,6 +472,42 @@ describe("runOverridesFixHook", () => {
     expect(result.verifyOk).toBe(false);
     expect(result.verifyFailures.length).toBeGreaterThan(0);
   });
+
+  it("verifies CVE-fix targets even when no OA fix is needed", async () => {
+    // Simulates the post-`npm install` state: cve-lite already upgraded lodash to a
+    // safe version, but a nested copy is still on disk at the vulnerable version.
+    // No OA findings on the override block itself, but OA008 fires on the stale
+    // nested copy when we pass lodash as a cveFixTarget.
+    writeFileSync(join(dir, "package.json"), JSON.stringify({
+      name: "x", overrides: { lodash: "4.17.21" },
+    }, null, 2));
+    writeFileSync(join(dir, "package-lock.json"), JSON.stringify({
+      lockfileVersion: 3,
+      packages: {
+        "": { name: "x" },
+        "node_modules/lodash": { version: "4.17.21" },
+      },
+    }));
+    // Simulate a nested vulnerable copy left behind.
+    const nestedDir = join(dir, "node_modules", "some-parent", "node_modules", "lodash");
+    writeFileSync(join(dir, "node_modules", "lodash", "package.json"),
+      JSON.stringify({ name: "lodash", version: "4.17.21" }), { flag: "w" });
+    require("node:fs").mkdirSync(nestedDir, { recursive: true });
+    writeFileSync(join(nestedDir, "package.json"),
+      JSON.stringify({ name: "lodash", version: "4.17.20" })); // vulnerable
+
+    const log = new MemoryAuditLog();
+    const result = await runOverridesFixHook({
+      projectPath: dir,
+      auditLog: log,
+      logger: noop(),
+      cveFixTargets: [{ name: "lodash", version: "4.17.21" }],
+    });
+
+    expect(result.applied).toBe(0);          // no OA fix needed
+    expect(result.verifyOk).toBe(false);     // OA008 fires on the nested copy
+    expect(result.verifyFailures.find((v) => v.ruleId === "OA008" && v.package === "lodash")).toBeDefined();
+  });
 });
 ```
 
@@ -487,11 +525,23 @@ import { audit, verify, applyFix, buildOverrideContext } from "../overrides/inde
 import type { OverrideFinding } from "../overrides/types.js";
 import type { AuditLogHandle } from "../audit-log/index.js";
 
+export interface VerifyTarget {
+  name: string;
+  version?: string;
+}
+
 export interface FixHookArgs {
   projectPath: string;
   auditLog: AuditLogHandle;
   logger: import("../utils/chalk.js").Logger;
-  /** Optional filter applied before fixing. Useful for tests and --rule. */
+  /**
+   * Packages that cve-lite's CVE-fix pipeline already touched (via `npm install`,
+   * `pnpm add`, or `yarn add`). Verify runs OA001/OA008 against these alongside any
+   * OA-fix targets to catch "package manager reported success but a vulnerable copy
+   * is still nested under a parent dep."
+   */
+  cveFixTargets?: ReadonlyArray<VerifyTarget>;
+  /** Optional filter applied before applying OA patches. Useful for tests and --rule. */
   filterFindings?: (findings: OverrideFinding[]) => OverrideFinding[];
 }
 
@@ -503,6 +553,7 @@ export interface FixHookResult {
 }
 
 export async function runOverridesFixHook(args: FixHookArgs): Promise<FixHookResult> {
+  // Step 1: audit overrides against the post-CVE-fix state.
   const ctx = buildOverrideContext(args.projectPath, {
     auditLog: args.auditLog,
     logger: args.logger,
@@ -513,30 +564,45 @@ export async function runOverridesFixHook(args: FixHookArgs): Promise<FixHookRes
   let fixable = auditResult.findings.filter((f) => f.fix?.type === "rfc6902");
   if (args.filterFindings) fixable = args.filterFindings(fixable);
 
-  if (fixable.length === 0) {
-    return { applied: 0, skipped: 0, verifyOk: true, verifyFailures: [] };
+  // Step 2: apply OA patches (if any).
+  let appliedTargets: VerifyTarget[] = [];
+  let applied = 0;
+  let skipped = 0;
+  if (fixable.length > 0) {
+    const report = applyFix({
+      projectPath: args.projectPath,
+      findings: fixable,
+      auditLog: args.auditLog,
+      dryRun: false,
+    });
+    applied = report.appliedPatches.length;
+    skipped = report.skipped.length;
+    appliedTargets = report.appliedPatches.map((p) => ({ name: p.package }));
   }
 
-  const report = applyFix({
-    projectPath: args.projectPath,
-    findings: fixable,
-    auditLog: args.auditLog,
-    dryRun: false,
-  });
+  // Step 3: verify the union of CVE-touched and OA-touched targets.
+  const verifyTargets = dedupeTargets([
+    ...(args.cveFixTargets ?? []),
+    ...appliedTargets,
+  ]);
 
-  // Rebuild context after the on-disk package.json changed.
+  // If neither pipeline touched anything verifiable, return clean.
+  if (verifyTargets.length === 0) {
+    return { applied, skipped, verifyOk: true, verifyFailures: [] };
+  }
+
+  // Rebuild context after the on-disk state changed (npm install + OA patches).
   const ctxAfter = buildOverrideContext(args.projectPath, {
     auditLog: args.auditLog,
     logger: args.logger,
     checkNetwork: false,
   });
 
-  const targets = report.appliedPatches.map((p) => ({ name: p.package }));
-  const verifyResult = await verify(targets, ctxAfter);
+  const verifyResult = await verify(verifyTargets, ctxAfter);
 
   return {
-    applied: report.appliedPatches.length,
-    skipped: report.skipped.length,
+    applied,
+    skipped,
     verifyOk: verifyResult.ok,
     verifyFailures: verifyResult.findings.map((f) => ({
       ruleId: f.ruleId,
@@ -544,6 +610,17 @@ export async function runOverridesFixHook(args: FixHookArgs): Promise<FixHookRes
       reason: f.message,
     })),
   };
+}
+
+function dedupeTargets(targets: ReadonlyArray<VerifyTarget>): VerifyTarget[] {
+  const seen = new Set<string>();
+  const out: VerifyTarget[] = [];
+  for (const t of targets) {
+    if (seen.has(t.name)) continue;
+    seen.add(t.name);
+    out.push(t);
+  }
+  return out;
 }
 ```
 
@@ -556,16 +633,29 @@ Expected: PASS (2 tests).
 
 - [ ] **Step 5: Wire the hook into `src/index.ts` on the scan path**
 
-Find the section of `src/index.ts` that handles `options.fix` for the scan command. After the existing CVE-fix logic completes, add:
+Find the section of `src/index.ts` that handles `options.fix` for the scan command. cve-lite's existing CVE-fix pipeline runs the package manager (`npm install` / `pnpm add` / `yarn add`) and produces some structure naming the packages it upgraded - in cve-lite today this is the `SuggestedFixTarget[]` returned by `buildSuggestedFixCommandPlan()` (or the equivalent post-execution result).
+
+Collect those as `cveFixTargets` and pass them to the hook. **After** cve-lite's existing CVE-fix-and-rescan path completes:
 
 ```ts
 if (options.fix) {
   const { runOverridesFixHook } = await import("./cli/fix-overrides-hook.js");
   const projectPathResolved = path.resolve(projectArg ?? ".");
+
+  // Collect CVE-touched targets from cve-lite's existing fix-plan result.
+  // The exact source object depends on cve-lite's current --fix implementation;
+  // expect something like `fixPlan.targets: SuggestedFixTarget[]` or an array of
+  // applied upgrades. Map each to a VerifyTarget.
+  const cveFixTargets = (fixPlan?.targets ?? []).map((t) => ({
+    name: t.package,
+    version: t.targetVersion,
+  }));
+
   const fixResult = await runOverridesFixHook({
     projectPath: projectPathResolved,
     auditLog,                      // the handle created earlier in index.ts (Plan 5 wires this fully; for now use createAuditLog(options.auditLog))
     logger,
+    cveFixTargets,
   });
   if (!fixResult.verifyOk) {
     logger.error(
