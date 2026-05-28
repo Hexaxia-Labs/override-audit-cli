@@ -1,11 +1,12 @@
 # override-audit-cli
 
-[![version](https://img.shields.io/badge/version-v0.3.0-blue)](CHANGELOG.md)
+[![CI](https://img.shields.io/github/actions/workflow/status/Hexaxia-Labs/override-audit-cli/ci.yml?branch=main&label=CI&logo=github)](https://github.com/Hexaxia-Labs/override-audit-cli/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/Hexaxia-Labs/override-audit-cli?display_name=tag&color=blue)](https://github.com/Hexaxia-Labs/override-audit-cli/releases)
+[![license](https://img.shields.io/github/license/Hexaxia-Labs/override-audit-cli?color=43853d)](LICENSE)
 [![tests](https://img.shields.io/badge/tests-200%20passing-43853d?logo=jest&logoColor=white)](#)
 [![detectors](https://img.shields.io/badge/detectors-8-43853d)](docs/rules/)
 [![node](https://img.shields.io/badge/node-%E2%89%A518-43853d?logo=node.js&logoColor=white)](https://nodejs.org)
 [![typescript](https://img.shields.io/badge/typescript-5.x-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![license](https://img.shields.io/badge/license-MIT-43853d)](LICENSE)
 
 Hygiene auditor for npm and pnpm package `overrides` blocks.
 
