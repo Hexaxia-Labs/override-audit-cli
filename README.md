@@ -36,11 +36,24 @@ A scan blends all of these into a single ranked list of findings. `--fix` applie
 
 ## Install
 
+`npm` publish is imminent. Until then, install from source:
+
+```bash
+git clone https://github.com/Hexaxia-Labs/override-audit-cli.git
+cd override-audit-cli
+npm install && npm run build
+npm link
+```
+
+That makes the `override-audit` binary available on your `PATH`.
+
+Once the package is published, the canonical install will be:
+
 ```bash
 npm install -g @hexaxia-labs/override-audit-cli
 ```
 
-Or run without installing:
+Or:
 
 ```bash
 npx @hexaxia-labs/override-audit-cli
