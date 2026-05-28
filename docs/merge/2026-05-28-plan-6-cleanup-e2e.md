@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Migrate the remaining preserved artifacts (test fixtures, rule docs), delete `_preserved-override-audit/`, dogfood the merged CLI against `hexmetrics` and `hexops`, and produce the artifact set Phase 2 needs: a clean diff against `cve-lite-cli@main`, a release-note draft for the cve-lite major bump, and a sign-off checklist.
+**Goal:** Migrate the remaining preserved artifacts (test fixtures, rule docs), delete `_preserved-override-audit/`, dogfood the merged CLI against `hexmetrics`, and produce the artifact set Phase 2 needs: a clean diff against `cve-lite-cli@main`, a release-note draft for the cve-lite major bump, and a sign-off checklist.
 
 **Architecture:** This plan is mostly file-move and validation, not new code. The substantive change: rule docs (`OA001.md`...`OA008.md`) move to cve-lite's `src/docs/` (or wherever cve-lite serves docs from), URLs in detector source align with the new docs locations, fixtures move to `tests/overrides/fixtures/`. The dogfood validation runs the merged CLI against two real npm projects and confirms reasonable output.
 
@@ -287,30 +287,7 @@ In your working notes (not a commit yet):
 
 ---
 
-## Task 8: Dogfood against `hexops` (pnpm)
-
-**Files:** none (read-only validation)
-
-- [ ] **Step 1: Locate hexops**
-
-```bash
-ls ~/Projects/hexops/package.json ~/Projects/hexops/pnpm-lock.yaml
-```
-
-- [ ] **Step 2: Run audit**
-
-```bash
-node dist/index.js overrides ~/Projects/hexops --json > /tmp/hexops-overrides.json
-node dist/index.js ~/Projects/hexops --check-overrides --audit-log /tmp/hexops-audit.ndjson
-```
-
-- [ ] **Step 3: Inspect**
-
-Same approach as Task 7. The pnpm path exercises OA003 (wrong-section), OA005 (nested-override) and the pnpm lockfile parser in ways the npm-based hexmetrics does not.
-
----
-
-## Task 9: Handoff checklist
+## Task 8: Handoff checklist
 
 **Files:**
 - Create: `docs/merge/handoff-checklist.md`
@@ -350,8 +327,7 @@ Aaron and Sonu both confirm before pushing this branch's content to a
 ## Dogfood
 
 - [ ] `cve-lite overrides ~/Projects/hexmetrics` produces reasonable output.
-- [ ] `cve-lite overrides ~/Projects/hexops` produces reasonable output.
-- [ ] No P1 surprises in either run.
+- [ ] No P1 surprises.
 
 ## Docs
 
@@ -378,7 +354,7 @@ git commit -m "docs(merge): dev-to-test handoff checklist"
 
 ---
 
-## Task 10: Draft release notes
+## Task 9: Draft release notes
 
 **Files:**
 - Create: `docs/merge/handoff-release-notes.md`
@@ -416,7 +392,7 @@ git commit -m "docs(merge): draft cve-lite vNext release notes"
 
 ---
 
-## Task 11: Final gate
+## Task 10: Final gate
 
 - [ ] **Step 1: Final test run**
 
@@ -470,9 +446,8 @@ Plan 6 complete when the checklist is fully signed.
 | Audit-log reference doc migrated | Task 4 |
 | Architecture / usage merged into cve-lite docs | Task 5 |
 | Dogfood validation against hexmetrics | Task 7 |
-| Dogfood validation against hexops | Task 8 |
-| Phase 1 exit criteria satisfied | Tasks 11, 9 |
-| Handoff artifact for Phase 2 | Tasks 9, 10 |
+| Phase 1 exit criteria satisfied | Tasks 10, 8 |
+| Handoff artifact for Phase 2 | Tasks 8, 9 |
 
 ## What happens next (Phase 2)
 

@@ -842,4 +842,4 @@ Plan 5 complete when:
 
 ## Next plan
 
-Plan 6 (`docs/merge/2026-05-28-plan-6-cleanup-e2e.md`) deletes `_preserved-override-audit/`, dogfoods cve-lite against hexmetrics and hexops, and produces the dev-to-test handoff artifact for Phase 2.
+Plan 6 (`docs/merge/2026-05-28-plan-6-cleanup-e2e.md`) deletes `_preserved-override-audit/`, dogfoods cve-lite against `hexmetrics`, and produces the dev-to-test handoff artifact for Phase 2.
