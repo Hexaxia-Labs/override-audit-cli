@@ -1,7 +1,7 @@
-src/
-tests/
-docs/
-.github/
-tsconfig.json
-jest.config.mjs
+src
+node_modules
+reports
+.cache
+*.zip
+*.sarif
 *.log

@@ -1,0 +1,16 @@
+lockfileVersion: '9.0'
+
+importers:
+  .:
+    dependencies:
+      lodash:
+        specifier: 4.17.20
+        version: 4.17.20
+
+packages:
+  lodash@4.17.20:
+    resolution: {integrity: sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZboGEBEeR1kG+Y1GXmA==}
+    engines: {node: '>=4'}
+
+snapshots:
+  lodash@4.17.20: {}

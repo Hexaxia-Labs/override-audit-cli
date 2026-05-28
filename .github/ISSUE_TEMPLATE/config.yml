@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security issue
+    url: https://github.com/sonukapoor/cve-lite-cli/security/policy
+    about: Please use the repository security policy for undisclosed security issues in CVE Lite CLI itself.

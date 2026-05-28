@@ -1,0 +1,7 @@
+{
+  "name": "server",
+  "private": true,
+  "dependencies": {
+    "@eslint/eslintrc": "3.2.0"
+  }
+}

@@ -1,0 +1,51 @@
+name: Self Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  self-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run CVE Lite CLI against this repo
+        run: node dist/index.js . --verbose --fail-on high
+
+  self-scan-action:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run CVE Lite CLI GitHub Action against this repo
+        uses: OWASP/cve-lite-cli@v1
+        with:
+          verbose: "true"
+          fail-on: high
+          sarif: "true"
+
+      - name: Upload SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: ${{ github.workspace }}

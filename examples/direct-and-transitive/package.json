@@ -1,0 +1,20 @@
+{
+  "name": "cve-lite-example-direct-and-transitive",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Intentionally vulnerable example project for testing mixed direct and transitive vulnerability output in CVE Lite CLI.",
+  "license": "MIT",
+  "scripts": {
+    "scan": "cve-lite scan",
+    "scan:verbose": "cve-lite scan --verbose",
+    "scan:json": "cve-lite scan --json",
+    "scan:report": "cve-lite scan --report"
+  },
+  "dependencies": {
+    "axios": "0.21.1",
+    "react-router-dom": "5.2.0"
+  },
+  "overrides": {
+    "path-to-regexp": "1.7.0"
+  }
+}

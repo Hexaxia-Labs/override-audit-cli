@@ -1,0 +1,49 @@
+{
+  "name": "turbo-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vercel/turborepo.git"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "build:turbo": "pnpm run --filter=@turbo/cli build",
+    "build:ts": "tsc -b tsconfig.project.json",
+    "lint": "pnpm exec oxlint --deny-warnings .",
+    "lint:fix": "pnpm exec oxlint --fix .",
+    "format": "oxfmt --check",
+    "format:fix": "oxfmt .",
+    "check:toml": "taplo format --check",
+    "fix:toml": "taplo format",
+    "docs:dev": "turbo run dev --filter=./apps/docs",
+    "turbo": "pnpm run build:turbo && ./target/debug/turbo",
+    "turbo-prebuilt": "pnpm -- turbo",
+    "prepare": "husky install",
+    "test": "turbo run test",
+    "tbx": "pnpm --filter @turbo/tbx tbx",
+    "rustdoc": "RUSTDOCFLAGS=\"-Z unstable-options --enable-index-page\" cargo doc --workspace --no-deps --keep-going || true",
+    "rustdoc:open": "RUSTDOCFLAGS=\"-Z unstable-options --enable-index-page\" cargo doc --workspace --no-deps --keep-going --open",
+    "check": "ultracite check",
+    "fix": "ultracite fix"
+  },
+  "devDependencies": {
+    "@taplo/cli": "0.5.2",
+    "@types/node": "22.15.3",
+    "husky": "8.0.3",
+    "lint-staged": "16.4.0",
+    "oxfmt": "^0.34.0",
+    "oxlint": "^1.49.0",
+    "semver": "7.5.2",
+    "typescript": "5.5.4",
+    "ultracite": "7.4.3"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,md,mdx,mjs,yml,yaml,css,json,jsonc}": "oxfmt --no-error-on-unmatched-pattern",
+    "*.toml": "taplo format"
+  },
+  "engines": {
+    "node": "22.x"
+  },
+  "packageManager": "pnpm@10.28.0"
+}

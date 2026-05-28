@@ -1,0 +1,7 @@
+{
+  "name": "cve-lite-example-pnpm-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Intentionally vulnerable monorepo example for testing pnpm workspace lockfile parsing and workspace-scoped fix commands in CVE Lite CLI.",
+  "license": "MIT"
+}

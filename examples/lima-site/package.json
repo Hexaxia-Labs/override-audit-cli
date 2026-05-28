@@ -1,0 +1,22 @@
+{
+  "name": "lima-site",
+  "version": "1.0",
+  "description": "Lima website that uses Docsy theme for technical documentation.",
+  "repository": "github:lima-vm/lima",
+  "homepage": "https://lima-vm.io",
+  "author": "Lima",
+  "license": "Apache-2.0",
+  "bugs": "https://github.com/lima-vm/lima/issues",
+  "spelling": "cSpell:ignore HTMLTEST precheck postbuild -",
+  "scripts": {
+    "scan": "cve-lite scan",
+    "scan:verbose": "cve-lite scan --verbose",
+    "scan:json": "cve-lite scan --json",
+    "scan:report": "cve-lite scan --report"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.21",
+    "hugo-extended": "0.133.1",
+    "postcss-cli": "^11.0.1"
+  }
+}

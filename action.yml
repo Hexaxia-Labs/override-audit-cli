@@ -1,0 +1,198 @@
+name: "CVE Lite CLI"
+description: "Run CVE Lite CLI in GitHub Actions for JS/TS dependency vulnerability scanning."
+author: "Sonu Kapoor"
+
+branding:
+  icon: "shield"
+  color: "green"
+
+inputs:
+  node-version:
+    description: "Node.js version used to install and run CVE Lite CLI"
+    required: false
+    default: "20"
+  path:
+    description: "Project path to scan"
+    required: false
+    default: "."
+  fail-on:
+    description: "Exit non-zero at or above this severity"
+    required: false
+    default: ""
+  all:
+    description: "Show all findings in the table regardless of severity threshold"
+    required: false
+    default: "false"
+  verbose:
+    description: "Run the scan with verbose output"
+    required: false
+    default: "false"
+  prod-only:
+    description: "Exclude dev dependencies where available"
+    required: false
+    default: "false"
+  offline:
+    description: "Run the scan using the local advisory database"
+    required: false
+    default: "false"
+  offline-db:
+    description: "Path to the local advisory database file"
+    required: false
+    default: ""
+  sync-advisories:
+    description: "Build or refresh the local advisory database before scanning"
+    required: false
+    default: "false"
+  usage:
+    description: "Scan source files to detect which vulnerable packages are actually imported"
+    required: false
+    default: "false"
+  only-used:
+    description: "Only report findings for packages that are imported in source code (implies usage)"
+    required: false
+    default: "false"
+  sarif:
+    description: "Write SARIF 2.1.0 output to a timestamped .sarif file for GitHub Code Scanning upload"
+    required: false
+    default: "false"
+  no-cache:
+    description: "Skip the OSV query cache and fetch fresh results; defaults to true in CI"
+    required: false
+    default: "true"
+  cdx:
+    description: "Write CycloneDX 1.4 SBOM to a timestamped .cdx.json file"
+    required: false
+    default: "false"
+  ca-cert:
+    description: "Path to a PEM CA certificate file for corporate SSL inspection proxies"
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@v6
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Install CVE Lite CLI dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm ci
+
+    - name: Build CVE Lite CLI
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm run build
+
+    - name: Resolve action inputs
+      id: resolve
+      shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_OFFLINE: ${{ inputs.offline }}
+        INPUT_OFFLINE_DB: ${{ inputs.offline-db }}
+        INPUT_SYNC_ADVISORIES: ${{ inputs.sync-advisories }}
+      run: |
+        set -euo pipefail
+
+        project_path="${INPUT_PATH:-.}"
+        requested_offline_db="${INPUT_OFFLINE_DB:-}"
+        use_offline="false"
+        resolved_offline_db=""
+
+        if [[ "${INPUT_OFFLINE}" == "true" || "${INPUT_SYNC_ADVISORIES}" == "true" || -n "${requested_offline_db}" ]]; then
+          use_offline="true"
+          resolved_offline_db="${requested_offline_db:-./.cache/cve-lite/advisories.db}"
+        fi
+
+        {
+          echo "project-path=${project_path}"
+          echo "use-offline=${use_offline}"
+          echo "offline-db=${resolved_offline_db}"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Sync local advisory database
+      if: ${{ inputs.sync-advisories == 'true' }}
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        OFFLINE_DB_PATH: ${{ steps.resolve.outputs.offline-db }}
+        INPUT_CA_CERT: ${{ inputs.ca-cert }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$(dirname "${OFFLINE_DB_PATH}")"
+        sync_args=(advisories sync --output "${OFFLINE_DB_PATH}")
+        if [[ -n "${INPUT_CA_CERT}" ]]; then
+          sync_args+=("--ca-cert" "${INPUT_CA_CERT}")
+        fi
+        node "${ACTION_PATH}/dist/index.js" "${sync_args[@]}"
+
+    - name: Run CVE Lite CLI scan
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        PROJECT_PATH: ${{ steps.resolve.outputs.project-path }}
+        USE_OFFLINE: ${{ steps.resolve.outputs.use-offline }}
+        OFFLINE_DB_PATH: ${{ steps.resolve.outputs.offline-db }}
+        INPUT_ALL: ${{ inputs.all }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_VERBOSE: ${{ inputs.verbose }}
+        INPUT_PROD_ONLY: ${{ inputs.prod-only }}
+        INPUT_USAGE: ${{ inputs.usage }}
+        INPUT_ONLY_USED: ${{ inputs.only-used }}
+        INPUT_SARIF: ${{ inputs.sarif }}
+        INPUT_NO_CACHE: ${{ inputs.no-cache }}
+        INPUT_CDX: ${{ inputs.cdx }}
+        INPUT_CA_CERT: ${{ inputs.ca-cert }}
+      run: |
+        set -euo pipefail
+
+        args=("${PROJECT_PATH}")
+
+        if [[ "${INPUT_ALL}" == "true" ]]; then
+          args+=("--all")
+        fi
+
+        if [[ "${INPUT_VERBOSE}" == "true" ]]; then
+          args+=("--verbose")
+        fi
+
+        if [[ "${INPUT_PROD_ONLY}" == "true" ]]; then
+          args+=("--prod-only")
+        fi
+
+        if [[ -n "${INPUT_FAIL_ON}" ]]; then
+          args+=("--fail-on" "${INPUT_FAIL_ON}")
+        fi
+
+        if [[ "${USE_OFFLINE}" == "true" ]]; then
+          args+=("--offline-db" "${OFFLINE_DB_PATH}")
+        fi
+
+        if [[ "${INPUT_ONLY_USED}" == "true" ]]; then
+          args+=("--only-used")
+        elif [[ "${INPUT_USAGE}" == "true" ]]; then
+          args+=("--usage")
+        fi
+
+        if [[ "${INPUT_SARIF}" == "true" ]]; then
+          args+=("--sarif")
+        fi
+
+        if [[ "${INPUT_NO_CACHE}" == "true" ]]; then
+          args+=("--no-cache")
+        fi
+
+        if [[ "${INPUT_CDX}" == "true" ]]; then
+          args+=("--cdx")
+        fi
+
+        if [[ -n "${INPUT_CA_CERT}" ]]; then
+          args+=("--ca-cert" "${INPUT_CA_CERT}")
+        fi
+
+        node "${ACTION_PATH}/dist/index.js" "${args[@]}"

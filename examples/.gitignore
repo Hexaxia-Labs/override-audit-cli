@@ -1,0 +1,8 @@
+node_modules/
+
+# Full project clones — too large for in-repo fixtures.
+# Clone these separately for local testing (see readme).
+analog/
+juice-shop/
+lint-staged/
+nest/

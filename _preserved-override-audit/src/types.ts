@@ -1,0 +1,206 @@
+// Shared types for override-audit-cli.
+// Contract spec: docs/superpowers/specs/2026-05-27-override-audit-cli-design.md §4, §6.
+
+export type PackageManager = 'npm' | 'pnpm';
+
+export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
+
+export const SEVERITY_RANK: Record<Severity, number> = {
+  info: 0, low: 1, medium: 2, high: 3, critical: 4,
+};
+
+export type RuleId =
+  | 'OA001-ORPHAN-TARGET'
+  | 'OA002-FLOATING-TAG'
+  | 'OA003-WRONG-SECTION'
+  | 'OA004-INSTALLED-NEWER'
+  | 'OA005-NESTED-OVERRIDE'
+  | 'OA006-COUPLED-PLATFORM-BINARY'
+  | 'OA007-FROZEN-LATEST'
+  | 'OA008-VULNERABLE-TWIN';
+
+export type SubRuleId =
+  | 'OA005.a-NON-NPM'
+  | 'OA005.b-ORPHANED-OUTER'
+  | 'OA005.c-ORPHANED-INNER'
+  | 'OA005.d-LEAKY'
+  | 'OA005.e-SUSPECT';
+
+export type RemediationAction = 'remove' | 'replace' | 'move' | 'suggest';
+
+/** RFC 6902 JSON Patch operation (subset used by override-audit). */
+export type RFC6902Patch =
+  | { op: 'remove'; path: string }
+  | { op: 'replace'; path: string; value: unknown }
+  | { op: 'move'; from: string; path: string }
+  | { op: 'add'; path: string; value: unknown };
+
+export interface Remediation {
+  action: RemediationAction;
+  /** Single-op patch. Null when the rule's fix is multi-op (see `patches`) or suggest-only. */
+  patch: RFC6902Patch | null;
+  /**
+   * Multi-op patch sequence. When present, fixers apply this in order rather
+   * than the single `patch`. Used by rules whose fix requires multiple ops
+   * (e.g. OA006: remove the binary override AND add a parent override).
+   *
+   * Field is optional for backward compatibility with v0.2.0 consumers.
+   * Single-op rules continue to use `patch` and leave this undefined.
+   */
+  patches?: RFC6902Patch[];
+  runnableFixCommand?: string;
+  explanation: string;
+}
+
+export interface Finding {
+  ruleId: RuleId;
+  subRuleId?: SubRuleId;
+  severity: Severity;
+  title: string;
+  detail: string;
+  package: string;                   // override key (logical package name)
+  overridePath: string[];            // path into package.json, e.g. ['overrides','postcss']
+  pinValue: string | Record<string, unknown>;
+  installedVersion?: string;
+  packageManager: PackageManager;
+  remediation: Remediation;
+  references: string[];
+}
+
+export interface Summary {
+  findingCount: number;
+  bySeverity: Record<Severity, number>;
+  byRule: Record<string, number>;
+}
+
+export interface AppliedPatch {
+  ruleId: RuleId;
+  subRuleId?: SubRuleId;
+  package: string;
+  /** Primary patch op (first element of patches; convenience for single-op consumers). */
+  patch: RFC6902Patch;
+  /** Full ordered op list. Present when the fix was multi-op; for single-op fixes this is just [patch]. */
+  patches: RFC6902Patch[];
+}
+
+export interface SkippedForFix {
+  ruleId: RuleId;
+  subRuleId?: SubRuleId;
+  package: string;
+  reason: string;
+}
+
+export interface FixReport {
+  /** Same attemptId as the parent OverrideAuditOutput.attemptId — threads through the run. */
+  attemptId: string;
+  /** ISO timestamp of when fix() ran. */
+  appliedAt: string;
+  /** When true, no file writes occurred. */
+  dryRun: boolean;
+  /** Patches that were (or would be, when dryRun) applied. */
+  appliedPatches: AppliedPatch[];
+  /** Findings that had no auto-applicable patch (suggest-only, below severity, rule-filtered, etc.). */
+  skippedFindings: SkippedForFix[];
+  /** Post-fix re-scan output; null when --no-post-fix-rescan was passed. */
+  remainingFindings: Finding[] | null;
+  /** Findings that did not exist pre-fix but appeared post-fix (regressions). */
+  newFindings: Finding[];
+}
+
+export interface FixOptions {
+  dryRun: boolean;
+  rescan: boolean;
+  severityFloor: Severity;
+  ruleFilters: Map<string, boolean>;
+  includeSubSuspect: boolean;
+}
+
+export interface OverrideAuditOutput {
+  schemaVersion: '1';
+  tool: 'override-audit-cli';
+  toolVersion: string;
+  generatedAt: string;
+  projectPath: string;
+  packageManager: PackageManager;
+  attemptId: string;
+  summary: Summary;
+  findings: Finding[];
+  skippedDetectors?: { ruleId: RuleId; reason: string }[];
+  /** Populated only when run with --fix. Additive — v0.1.x consumers can ignore. */
+  fix?: FixReport;
+}
+
+/** A package.json override entry as parsed (preserves nested shape). */
+export type OverrideValue = string | { [key: string]: OverrideValue };
+
+export interface OverrideEntry {
+  /** Original key as written, e.g. "postcss" or "react@>=18". */
+  key: string;
+  /** Bare package name (key with any `@>=...` specifier stripped). */
+  packageName: string;
+  /** Value at the key — string pin or nested object. */
+  value: OverrideValue;
+  /** Path through package.json: e.g. ['overrides','postcss'] or ['pnpm','overrides','react']. */
+  path: string[];
+  /** Which container this entry lives in. */
+  container: 'overrides' | 'pnpm.overrides' | 'resolutions';
+}
+
+/** One installed copy of a package somewhere under node_modules. */
+export interface InstalledCopy {
+  /** Package name (e.g. '@esbuild/linux-x64'). */
+  name: string;
+  /** Absolute path to the copy's directory under node_modules. */
+  path: string;
+  /** Version from that copy's package.json. */
+  version: string;
+}
+
+/** A parent package that declares the target as a dependency. */
+export interface ParentDeclaration {
+  /** Parent's package name. */
+  parentName: string;
+  /** Parent's installed version. */
+  parentVersion: string;
+  /** Where in the parent's manifest the dep was declared. */
+  declaredIn: 'dependencies' | 'optionalDependencies' | 'peerDependencies';
+  /** The version range/value the parent wrote (e.g. '0.25.12' or '^0.25.0'). */
+  declaredValue: string;
+  /** True if declaredValue is a concrete pin like '0.25.12' (not a range). */
+  exactVersion: boolean;
+}
+
+/** Registry dist-tags response (subset). */
+export interface RegistryDistTags {
+  latest?: string;
+  next?: string;
+  [tag: string]: string | undefined;
+}
+
+/** Built once per scan; consumed by all detectors. */
+export interface Context {
+  projectPath: string;
+  packageJson: Record<string, unknown>;
+  packageJsonRaw: string;           // for indent detection later
+  packageManager: PackageManager;
+  /** Override entries flattened across containers. */
+  overrideEntries: OverrideEntry[];
+  /** Bare package names present anywhere in the lockfile resolved tree. */
+  lockfilePackageNames: Set<string>;
+  /** name → installed version from node_modules/<name>/package.json (top-level only). */
+  installedVersions: Map<string, string>;
+  /** name → every installed copy in the tree (top-level + nested). Populated lazily by detectors that need it. */
+  installedCopies: Map<string, InstalledCopy[]>;
+  /** name → parents that declare it as a dep (for coupled-binary analysis). */
+  parentDeclarations: Map<string, ParentDeclaration[]>;
+  /** name → registry dist-tags (populated only when --with-registry). */
+  registryDistTags: Map<string, RegistryDistTags>;
+  /** Detectors that couldn't run; pass through to output.skippedDetectors. */
+  skippedDetectors: { ruleId: RuleId; reason: string }[];
+}
+
+/** Scanner output, before output rendering. */
+export interface ScanResult {
+  context: Context;
+  findings: Finding[];
+}

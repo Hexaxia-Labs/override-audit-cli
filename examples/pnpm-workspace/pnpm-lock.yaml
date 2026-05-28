@@ -1,0 +1,39 @@
+lockfileVersion: '9.0'
+
+importers:
+  .:
+    {}
+
+  packages/backend:
+    dependencies:
+      axios:
+        specifier: 0.21.1
+        version: 0.21.1
+
+  packages/frontend:
+    dependencies:
+      lodash:
+        specifier: 4.17.20
+        version: 4.17.20
+
+packages:
+  axios@0.21.1:
+    resolution: {integrity: sha512-dKQiRHxGD9PPRIUNIWvZhPTPpl1rf/OxTYKsqKUDjBwYylTvV7SjSHJb9ratfyzM6wCdLCOYLzs73qpg5c4iGA==}
+    dependencies:
+      follow-redirects: ^1.10.0
+
+  follow-redirects@1.14.0:
+    resolution: {integrity: sha512-0vRwd7RKQBTElFZAl2OBmTBNVMnIGl1R5tPPFOsAvFeoqBiVBuFkP9Gl5gKP0t0EM0c0yjVnS2HdBEj6SKplkw==}
+
+  lodash@4.17.20:
+    resolution: {integrity: sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZboGEBEeR1kG+Y1GXmA==}
+    engines: {node: '>=4'}
+
+snapshots:
+  axios@0.21.1:
+    dependencies:
+      follow-redirects: 1.14.0
+
+  follow-redirects@1.14.0: {}
+
+  lodash@4.17.20: {}

@@ -1,58 +1,52 @@
 {
-  "name": "@hexaxia-labs/override-audit-cli",
-  "version": "0.3.0",
-  "description": "Hygiene auditor for npm/pnpm package overrides. Detects orphaned targets, floating-tag pins, misplaced sections, and ineffective nested overrides.",
+  "name": "cve-lite-cli",
+  "version": "1.18.1",
+  "description": "Developer-friendly CLI for scanning JS/TS projects for dependency vulnerabilities using local lockfiles and OSV",
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "bin": {
-    "override-audit": "./dist/cli/index.js"
+    "cve-lite": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts .",
+    "start": "node dist/index.js .",
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --passWithNoTests",
+    "test:watch": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --watch --passWithNoTests"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.8.0",
+    "fflate": "^0.8.2",
+    "yaml": "^2.7.1",
+    "yarn-lockfile": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.0.0",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.9",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.2"
+  },
+  "keywords": [
+    "security",
+    "cve",
+    "vulnerability",
+    "cli",
+    "osv",
+    "owasp",
+    "npm",
+    "pnpm",
+    "yarn",
+    "bun"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
   },
   "files": [
     "dist",
     "README.md",
     "LICENSE"
-  ],
-  "scripts": {
-    "build": "tsc -p tsconfig.json && chmod +x dist/cli/index.js",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
-    "prepublishOnly": "npm run build && npm test"
-  },
-  "engines": {
-    "node": ">=18"
-  },
-  "keywords": [
-    "npm",
-    "pnpm",
-    "overrides",
-    "audit",
-    "hygiene",
-    "security",
-    "cli",
-    "lint",
-    "package-json"
-  ],
-  "author": "Aaron Lamb <aaron.lamb@hexaxia.tech>",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Hexaxia-Labs/override-audit-cli.git"
-  },
-  "bugs": {
-    "url": "https://github.com/Hexaxia-Labs/override-audit-cli/issues"
-  },
-  "homepage": "https://github.com/Hexaxia-Labs/override-audit-cli#readme",
-  "dependencies": {
-    "semver": "^7.6.0"
-  },
-  "devDependencies": {
-    "@types/jest": "^29.5.12",
-    "@types/node": "^20.11.0",
-    "@types/semver": "^7.5.6",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.1.2",
-    "typescript": "^5.4.0"
-  },
-  "private": false
+  ]
 }

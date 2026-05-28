@@ -1,14 +1,25 @@
 node_modules/
-!tests/fixtures/**/node_modules/
 dist/
-coverage/
+*.tgz
+*.zip
+
+.cache/
+reports/
+*.sarif
 *.log
+
 .DS_Store
-.env
-.env.local
+.vscode/
+.idea/
 
-# Local-only superpowers spec/plan drafts (kept out of public repo)
+coverage/
+website/build/
+website/.docusaurus/
+AGENTS.md
+CLAUDE.md
+.superpowers/
 docs/superpowers/
+cve-report/
 
-# Reference clone of OWASP/cve-lite-cli for in-tree consultation during the merge work
+# Hexaxia dev-area exclusions (this repo is a dev mirror of cve-lite-cli)
 cve-lite-ref/

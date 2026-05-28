@@ -1,64 +1,79 @@
-export const HELP_TEXT = `
-override-audit  —  hygiene auditor for npm/pnpm package overrides
+import { chalk } from "../utils/chalk.js";
+import { getCliVersion } from "../utils/version-info.js";
+import { checkForUpdate } from "../utils/update-check.js";
+import type { UpdateCheckOptions } from "../utils/update-check.js";
 
-Usage:
-  override-audit [path] [flags]
+const CLI_VERSION = getCliVersion();
 
-  path                          Project directory to audit (default: cwd)
+const CLI_BANNER = [
+  `${chalk.green(">_")}  ${chalk.bold.whiteBright(`CVE Lite CLI (${CLI_VERSION})`)}`,
+  chalk.gray("────────────────────────────────"),
+  `${chalk.green("✔")} Scan dependencies`,
+  `${chalk.green("✔")} Highlight critical issues`,
+  `${chalk.green("✔")} Show a clear fix plan`,
+  "",
+  chalk.gray("Fast. Local. Developer-first.")
+].join("\n");
 
-DETECTION
-  --severity <level>            Minimum severity to report (critical|high|medium|low|info)
-                                Default: low.
-  --rule <code>[=on|off]        Enable/disable specific rules. Repeatable.
-                                Examples:  --rule OA002=off
-                                           --rule OA005.e=off
-  --include-sub-suspect         Include OA005.e-SUSPECT (info-level) findings in output.
-  --with-registry               Opt in to network calls (registry.npmjs.org) for OA007.
-                                Off by default — runs are local-only.
-  --registry-timeout <ms>       Per-request timeout for registry calls. Default 5000.
+export function printBanner(options?: UpdateCheckOptions): void {
+  if (options?.json) return;
+  console.log(CLI_BANNER);
+  console.log("");
+  checkForUpdate(options);
+}
 
-FIX
-  --fix                         Apply RFC 6902 patches from detector findings
-                                and rewrite package.json in place. Skips
-                                findings whose remediation is suggest-only
-                                (OA008 — requires human review).
-  --dry-run                     With --fix: report what would change without
-                                writing to disk. Implies no post-fix rescan.
-  --no-post-fix-rescan          With --fix: skip the post-fix verification scan.
+export function printHelp(): void {
+  printBanner();
 
-CHANGE-CONTROL LOGGING (HexOps)
-  --attempt-id <id>             Externally-supplied attempt id (default: auto).
-  --source <name>               Tag what initiated the run (e.g. "ci", "manual").
-  --advisory <id>               Tie the run to an advisory id (e.g. "GHSA-...").
-  --meta <key=value>            Repeatable freeform metadata; one pair per flag.
-  --log-file <path>             Append NDJSON change-control records to <path>.
-  --log-level <level>           Min level for --log-file: debug|info|warn|error.
-                                Default: info.
-
-OUTPUT
-  --json                        Emit JSON OverrideAuditOutput to stdout.
-  --no-color                    Reserved for future color support.
-
-  -h, --help                    Show this help.
-  -V, --version                 Print version.
-
-DETECTORS
-  OA001-ORPHAN-TARGET           Override target not in resolved tree
-  OA002-FLOATING-TAG            Pin uses 'latest'/'next'/'*'/non-semver
-  OA003-WRONG-SECTION           pnpm.overrides in npm project (or vice versa)
-  OA004-INSTALLED-NEWER         Installed version surpassed concrete pin
-  OA005-NESTED-OVERRIDE         Nested-object override (5 sub-conditions)
-  OA006-COUPLED-PLATFORM-BINARY Override fights an exact-pinned parent
-  OA007-FROZEN-LATEST           'latest' pin frozen behind registry (--with-registry)
-  OA008-VULNERABLE-TWIN         Vulnerable copy still on disk despite override floor
-
-EXIT CODES
-  0   no findings at or above --severity
-  1   findings present (CI gating)
-  2   internal error (bad input, unreadable file, unknown flag)
-
-Coming next: --install / --no-install (auto-run npm install after --fix),
-             HexOps OverrideAuditSource integration (v1.0.0)
-
-Repo: https://github.com/Hexaxia-Labs/override-audit-cli
-`.trim();
+  const lines = [
+    "cve-lite",
+    "",
+    "Fast local-first CVE scanner for JS/TS projects using lockfiles + OSV",
+    "",
+    `Version: ${CLI_VERSION}`,
+    "",
+    "Usage:",
+    "  cve-lite [projectPath] [options]",
+    "  cve-lite advisories sync [options]",
+    "  cve-lite install-skill",
+    "  cve-lite config <set|unset|show> [key] [value]",
+    "",
+    "Scan options:",
+    "  --json                    Save scan results to a timestamped JSON file",
+    "  --report [dir]            Generate an HTML report in [dir] (default: ./cve-report)",
+    "  --sarif                   Write SARIF 2.1.0 output to a timestamped .sarif file",
+    "  --cdx                     Write CycloneDX 1.4 SBOM to a timestamped .cdx.json file",
+    "  --no-open                 Don't auto-open the report in the browser",
+    "  --fix                     Apply validated direct dependency fixes and rescan",
+    "  --osv-url <url>           Use a custom OSV-compatible advisory endpoint",
+    "  --ca-cert <path>          Path to a CA certificate file for corporate SSL proxies",
+    "  --verbose                 Show detailed output with fix plan, paths, and full table",
+    "  --prod-only               Exclude dev dependencies where available",
+    "  --fail-on <severity>      Exit non-zero at or above severity (default: critical)",
+    "  --batch-size <number>     OSV batch size (default: 100)",
+    "  --usage                   Scan project source files to check if vulnerable dependencies are imported",
+    "  --only-used               Filter out findings for packages that are not imported in your source code",
+    "  --offline                 Scan using the local advisory database",
+    "  --offline-db <path>       Use a specific local advisory database file",
+    "  --cache-dir <path>        Override cache directory",
+    "  --no-cache                Skip the query cache and fetch fresh results from OSV",
+    "  --search-depth <number>   Recursive search depth (default: 4)",
+    "  --all                     Show all findings in the main table",
+    "  --min-severity <level>    Minimum severity shown in table (default: medium)",
+    "",
+    "Advisory sync options:",
+    "  --output <path>           Write the local advisory database to this path",
+    "",
+    "Other commands:",
+    "  install-skill             Install AI assistant skill files for Claude Code,",
+    "                            Codex CLI, Gemini CLI, Cursor, and GitHub Copilot",
+    "",
+    "  config set ca-cert <path>  Save a CA certificate path to ~/.cve-lite-cli/config.json",
+    "  config unset ca-cert       Remove the saved CA certificate path",
+    "  config show                Show current configuration",
+    "",
+    "  -v, --version             Show the CLI version",
+    "  -h, --help                Show this help message"
+  ];
+  console.log(lines.join("\n"));
+}

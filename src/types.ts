@@ -1,206 +1,183 @@
-// Shared types for override-audit-cli.
-// Contract spec: docs/superpowers/specs/2026-05-27-override-audit-cli-design.md §4, §6.
+export type SeverityLabel = "none" | "low" | "medium" | "high" | "critical" | "unknown";
 
-export type PackageManager = 'npm' | 'pnpm';
-
-export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
-
-export const SEVERITY_RANK: Record<Severity, number> = {
-  info: 0, low: 1, medium: 2, high: 3, critical: 4,
+export type PackageRef = {
+  name: string;
+  version: string;
+  ecosystem: string;
+  dev?: boolean;
+  paths?: string[][];
 };
 
-export type RuleId =
-  | 'OA001-ORPHAN-TARGET'
-  | 'OA002-FLOATING-TAG'
-  | 'OA003-WRONG-SECTION'
-  | 'OA004-INSTALLED-NEWER'
-  | 'OA005-NESTED-OVERRIDE'
-  | 'OA006-COUPLED-PLATFORM-BINARY'
-  | 'OA007-FROZEN-LATEST'
-  | 'OA008-VULNERABLE-TWIN';
-
-export type SubRuleId =
-  | 'OA005.a-NON-NPM'
-  | 'OA005.b-ORPHANED-OUTER'
-  | 'OA005.c-ORPHANED-INNER'
-  | 'OA005.d-LEAKY'
-  | 'OA005.e-SUSPECT';
-
-export type RemediationAction = 'remove' | 'replace' | 'move' | 'suggest';
-
-/** RFC 6902 JSON Patch operation (subset used by override-audit). */
-export type RFC6902Patch =
-  | { op: 'remove'; path: string }
-  | { op: 'replace'; path: string; value: unknown }
-  | { op: 'move'; from: string; path: string }
-  | { op: 'add'; path: string; value: unknown };
-
-export interface Remediation {
-  action: RemediationAction;
-  /** Single-op patch. Null when the rule's fix is multi-op (see `patches`) or suggest-only. */
-  patch: RFC6902Patch | null;
-  /**
-   * Multi-op patch sequence. When present, fixers apply this in order rather
-   * than the single `patch`. Used by rules whose fix requires multiple ops
-   * (e.g. OA006: remove the binary override AND add a parent override).
-   *
-   * Field is optional for backward compatibility with v0.2.0 consumers.
-   * Single-op rules continue to use `patch` and leave this undefined.
-   */
-  patches?: RFC6902Patch[];
-  runnableFixCommand?: string;
-  explanation: string;
-}
-
-export interface Finding {
-  ruleId: RuleId;
-  subRuleId?: SubRuleId;
-  severity: Severity;
-  title: string;
-  detail: string;
-  package: string;                   // override key (logical package name)
-  overridePath: string[];            // path into package.json, e.g. ['overrides','postcss']
-  pinValue: string | Record<string, unknown>;
-  installedVersion?: string;
-  packageManager: PackageManager;
-  remediation: Remediation;
-  references: string[];
-}
-
-export interface Summary {
-  findingCount: number;
-  bySeverity: Record<Severity, number>;
-  byRule: Record<string, number>;
-}
-
-export interface AppliedPatch {
-  ruleId: RuleId;
-  subRuleId?: SubRuleId;
-  package: string;
-  /** Primary patch op (first element of patches; convenience for single-op consumers). */
-  patch: RFC6902Patch;
-  /** Full ordered op list. Present when the fix was multi-op; for single-op fixes this is just [patch]. */
-  patches: RFC6902Patch[];
-}
-
-export interface SkippedForFix {
-  ruleId: RuleId;
-  subRuleId?: SubRuleId;
-  package: string;
-  reason: string;
-}
-
-export interface FixReport {
-  /** Same attemptId as the parent OverrideAuditOutput.attemptId — threads through the run. */
-  attemptId: string;
-  /** ISO timestamp of when fix() ran. */
-  appliedAt: string;
-  /** When true, no file writes occurred. */
-  dryRun: boolean;
-  /** Patches that were (or would be, when dryRun) applied. */
-  appliedPatches: AppliedPatch[];
-  /** Findings that had no auto-applicable patch (suggest-only, below severity, rule-filtered, etc.). */
-  skippedFindings: SkippedForFix[];
-  /** Post-fix re-scan output; null when --no-post-fix-rescan was passed. */
-  remainingFindings: Finding[] | null;
-  /** Findings that did not exist pre-fix but appeared post-fix (regressions). */
-  newFindings: Finding[];
-}
-
-export interface FixOptions {
-  dryRun: boolean;
-  rescan: boolean;
-  severityFloor: Severity;
-  ruleFilters: Map<string, boolean>;
-  includeSubSuspect: boolean;
-}
-
-export interface OverrideAuditOutput {
-  schemaVersion: '1';
-  tool: 'override-audit-cli';
-  toolVersion: string;
-  generatedAt: string;
-  projectPath: string;
-  packageManager: PackageManager;
-  attemptId: string;
-  summary: Summary;
-  findings: Finding[];
-  skippedDetectors?: { ruleId: RuleId; reason: string }[];
-  /** Populated only when run with --fix. Additive — v0.1.x consumers can ignore. */
-  fix?: FixReport;
-}
-
-/** A package.json override entry as parsed (preserves nested shape). */
-export type OverrideValue = string | { [key: string]: OverrideValue };
-
-export interface OverrideEntry {
-  /** Original key as written, e.g. "postcss" or "react@>=18". */
-  key: string;
-  /** Bare package name (key with any `@>=...` specifier stripped). */
-  packageName: string;
-  /** Value at the key — string pin or nested object. */
-  value: OverrideValue;
-  /** Path through package.json: e.g. ['overrides','postcss'] or ['pnpm','overrides','react']. */
-  path: string[];
-  /** Which container this entry lives in. */
-  container: 'overrides' | 'pnpm.overrides' | 'resolutions';
-}
-
-/** One installed copy of a package somewhere under node_modules. */
-export interface InstalledCopy {
-  /** Package name (e.g. '@esbuild/linux-x64'). */
+export type NpmLockNode = {
+  id: string;
+  packageKey: string;
   name: string;
-  /** Absolute path to the copy's directory under node_modules. */
-  path: string;
-  /** Version from that copy's package.json. */
-  version: string;
-}
+  version: string | null;
+  packagePath: string;
+  dev: boolean;
+};
 
-/** A parent package that declares the target as a dependency. */
-export interface ParentDeclaration {
-  /** Parent's package name. */
-  parentName: string;
-  /** Parent's installed version. */
-  parentVersion: string;
-  /** Where in the parent's manifest the dep was declared. */
-  declaredIn: 'dependencies' | 'optionalDependencies' | 'peerDependencies';
-  /** The version range/value the parent wrote (e.g. '0.25.12' or '^0.25.0'). */
-  declaredValue: string;
-  /** True if declaredValue is a concrete pin like '0.25.12' (not a range). */
-  exactVersion: boolean;
-}
+export type NpmLockGraph = {
+  entryPackages: readonly string[];
+  nodeIdsFor: (name: string, version: string | null) => readonly string[];
+  getNode: (nodeId: string) => Readonly<NpmLockNode> | null;
+  parentsFor: (nodeId: string) => readonly string[];
+  childrenFor: (nodeId: string) => readonly string[];
+  rangeFor: (parentNodeId: string, childName: string) => string | null;
+  pathsFor: (nodeId: string) => string[][];
+};
 
-/** Registry dist-tags response (subset). */
-export interface RegistryDistTags {
-  latest?: string;
-  next?: string;
-  [tag: string]: string | undefined;
-}
+export type NpmTransitiveGraphNode = {
+  id: string;
+  name: string;
+  version: string | null;
+  packagePath?: string;
+};
 
-/** Built once per scan; consumed by all detectors. */
-export interface Context {
-  projectPath: string;
-  packageJson: Record<string, unknown>;
-  packageJsonRaw: string;           // for indent detection later
-  packageManager: PackageManager;
-  /** Override entries flattened across containers. */
-  overrideEntries: OverrideEntry[];
-  /** Bare package names present anywhere in the lockfile resolved tree. */
-  lockfilePackageNames: Set<string>;
-  /** name → installed version from node_modules/<name>/package.json (top-level only). */
-  installedVersions: Map<string, string>;
-  /** name → every installed copy in the tree (top-level + nested). Populated lazily by detectors that need it. */
-  installedCopies: Map<string, InstalledCopy[]>;
-  /** name → parents that declare it as a dep (for coupled-binary analysis). */
-  parentDeclarations: Map<string, ParentDeclaration[]>;
-  /** name → registry dist-tags (populated only when --with-registry). */
-  registryDistTags: Map<string, RegistryDistTags>;
-  /** Detectors that couldn't run; pass through to output.skippedDetectors. */
-  skippedDetectors: { ruleId: RuleId; reason: string }[];
-}
+export type NpmTransitiveGraphEdge = {
+  parentNodeId: string;
+  childName: string;
+  childNodeId: string;
+  range: string;
+};
 
-/** Scanner output, before output rendering. */
-export interface ScanResult {
-  context: Context;
-  findings: Finding[];
-}
+export type NpmTransitiveGraph = {
+  nodeIdsFor: (name: string, version: string | null) => readonly string[];
+  getNode: (nodeId: string) => Readonly<NpmTransitiveGraphNode> | null;
+  childrenFor: (nodeId: string) => readonly string[];
+  rangeFor: (parentNodeId: string, childName: string) => string | null;
+};
+
+export type ScanMode = "resolved-lockfile" | "manifest-fallback";
+export type ScanSource = "package-lock" | "npm-shrinkwrap" | "pnpm-lock" | "yarn-lock" | "bun-lock" | "package-json" | "unknown";
+
+export type ScanInput = {
+  mode: ScanMode;
+  source: ScanSource;
+  filePath: string | null;
+  packages: PackageRef[];
+  notes: string[];
+  warnings: string[];
+  skippedDependencies: string[];
+};
+
+export type OsvBatchResponse = {
+  results?: Array<{
+    vulns?: Array<{
+      id: string;
+      modified?: string;
+    }>;
+    next_page_token?: string;
+  }>;
+};
+
+export type OsvVuln = {
+  id: string;
+  aliases?: string[];
+  summary?: string;
+  details?: string;
+  withdrawn?: string;
+  severity?: Array<{ type?: string; score?: string }>;
+  database_specific?: Record<string, unknown>;
+  affected?: Array<{
+    package?: {
+      ecosystem?: string;
+      name?: string;
+      purl?: string;
+    };
+    ranges?: Array<{
+      type?: string;
+      events?: Array<{
+        introduced?: string;
+        fixed?: string;
+        last_affected?: string;
+      }>;
+    }>;
+  }>;
+};
+
+export type RecommendedParentUpgrade = {
+  package: string;
+  currentVersion: string;
+  targetVersion: string;
+  viaPath: string[];
+  vulnerablePackage: string;
+  confidence: "exact-direct-child" | "best-effort";
+  reason: string;
+};
+
+export type NpmTransitiveRemediation = {
+  kind: "update-parent-within-range" | "upgrade-parent-to-version";
+  package: string;
+  currentVersion: string;
+  viaPath: string[];
+  reason: string;
+  targetChildVersion: string;
+  targetVersion?: string;
+  workspaces?: string[];
+};
+
+export type Finding = {
+  pkg: PackageRef;
+  vulnerabilities: OsvVuln[];
+  severity: SeverityLabel;
+  cveAliases: string[];
+  dependencyPaths: string[][];
+  relationship: "direct" | "transitive" | "unknown";
+  firstFixedVersion: string | null;
+  validatedFirstFixedVersion?: string | null;
+  fixVersionValidationNote?: string | null;
+  validatedTargetScannedVersions?: number | null;
+  validatedTargetKnownVulnerableVersions?: number | null;
+  recommendedParentUpgrade?: RecommendedParentUpgrade | null;
+  recommendedNpmTransitiveRemediation?: NpmTransitiveRemediation | null;
+  usage?: {
+    imported: boolean;
+    files: string[];
+  };
+};
+
+export type QueryCacheEntry = { vulnIds: string[]; cachedAt: string };
+
+export type CacheFile = {
+  version: 3;
+  createdAt: string;
+  entries: Record<string, OsvVuln | null>;
+  queryEntries: Record<string, QueryCacheEntry>;
+};
+
+export type Spinner = {
+  update: (message: string) => void;
+  succeed: (message: string) => void;
+  fail: (message: string) => void;
+  stop: () => void;
+};
+
+export type CliCommand = "scan" | "advisories-sync" | "install-skill" | "config";
+
+export type ParsedOptions = {
+  version?: boolean;
+  json?: boolean;
+  verbose?: boolean;
+  fix?: boolean;
+  prodOnly?: boolean;
+  failOn: string;
+  batchSize: string;
+  offline?: boolean;
+  offlineDb?: string;
+  cacheDir?: string;
+  searchDepth?: string;
+  all?: boolean;
+  minSeverity?: string;
+  help?: boolean;
+  osvUrl?: string;
+  output?: string;
+  usage?: boolean;
+  onlyUsed?: boolean;
+  report?: string | true;
+  noOpen?: boolean;
+  noCache?: boolean;
+  sarif?: boolean;
+  cdx?: boolean;
+  caCert?: string;
+};

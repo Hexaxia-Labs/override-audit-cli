@@ -1,0 +1,28 @@
+{
+  "lockfileVersion": 0,
+  "workspaces": {
+    "": {
+      "name": "cve-lite-example-bun-workspace",
+      "workspaces": [
+        "packages/*",
+      ],
+    },
+    "packages/api": {
+      "name": "api",
+      "dependencies": {
+        "axios": "0.21.1",
+      },
+    },
+    "packages/web": {
+      "name": "web",
+      "dependencies": {
+        "lodash": "4.17.20",
+      },
+    },
+  },
+  "packages": {
+    "axios": [ "axios@0.21.1", "", { "follow-redirects": "^1.10.0" }, "" ],
+    "follow-redirects": [ "follow-redirects@1.14.0", "", {}, "" ],
+    "lodash": [ "lodash@4.17.20", "", {}, "" ],
+  },
+}

@@ -1,0 +1,10 @@
+{
+  "name": "cve-lite-example-pnpm-simple",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Intentionally vulnerable example project for testing pnpm lockfile parsing in CVE Lite CLI.",
+  "license": "MIT",
+  "dependencies": {
+    "lodash": "4.17.20"
+  }
+}

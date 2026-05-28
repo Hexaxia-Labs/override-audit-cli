@@ -1,0 +1,15 @@
+{
+  "lockfileVersion": 0,
+  "workspaces": {
+    "": {
+      "name": "cve-lite-example-bun-simple",
+      "dependencies": {
+        "axios": "0.21.1",
+      },
+    },
+  },
+  "packages": {
+    "axios": [ "axios@0.21.1", "", { "follow-redirects": "^1.10.0" }, "" ],
+    "follow-redirects": [ "follow-redirects@1.14.0", "", {}, "" ],
+  },
+}

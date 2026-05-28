@@ -1,0 +1,16 @@
+{
+  "name": "cve-lite-example-transitive-only",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Intentionally vulnerable example project for testing transitive-only CVE detection in CVE Lite CLI.",
+  "license": "MIT",
+  "scripts": {
+    "scan": "cve-lite scan",
+    "scan:verbose": "cve-lite scan --verbose",
+    "scan:json": "cve-lite scan --json",
+    "scan:report": "cve-lite scan --report"
+  },
+  "dependencies": {
+    "lint-staged": "15.2.0"
+  }
+}
