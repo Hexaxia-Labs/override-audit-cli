@@ -141,6 +141,7 @@ The TypeScript config is strict (`"strict": true`) and ESM (`"module": "NodeNext
 
 ## Reference docs
 
+- [`docs/usage.md`](docs/usage.md): end-user usage guide. Workflows, fixing, filtering, troubleshooting, common pitfalls.
 - [`docs/architecture.md`](docs/architecture.md): how data flows from raw filesystem state to findings/fixes/logs. Read this before adding a new detector or extending the fixer.
 - [`docs/change-control-logging.md`](docs/change-control-logging.md): NDJSON record schema. Read this if you're building a consumer (HexOps adapter, log shipper, audit dashboard).
 - [`docs/rules/`](docs/rules/): per-rule reference (one file per OA00N).

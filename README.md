@@ -47,6 +47,8 @@ override-audit --fix --log-file out.log --source ci --advisory GHSA-xxx \
                                      # emit NDJSON change-control records for HexOps
 ```
 
+**[See the full Usage Guide](docs/usage.md)** for a task-oriented walkthrough: first run, reading findings, workflows for daily dev / security incident response / CI gate, filtering, network features, troubleshooting, and common pitfalls.
+
 ## Exit codes
 
 | Code | Meaning |

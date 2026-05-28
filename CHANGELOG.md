@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Documentation
+- New: [`docs/usage.md`](docs/usage.md) is a task-oriented end-user guide covering first run, reading findings, workflows (daily dev / security incident response / CI gate), fixing, filtering, network features, JSON output, change-control logging, common pitfalls, and troubleshooting.
 - New: [`docs/architecture.md`](docs/architecture.md) covers the data-flow diagram, design invariants, and recipes for adding a new detector or extending the fixer. Aimed at contributors and embedders.
 - New: [`docs/change-control-logging.md`](docs/change-control-logging.md) gives the full NDJSON record schema with field-by-field reference, consumer recipes (`jq` examples), and guarantees. Aimed at log consumers (HexOps adapters, dashboards).
 - Updated `docs/rules/OA001.md` / `OA002.md` / `OA003.md` / `OA004.md`: replaced stale "coming in v0.2.0" notes with current `--fix` usage; OA004 now distinguishes safe `remove` vs cross-major `suggest` behavior.
