@@ -74,6 +74,71 @@ OA005 sub-codes: `.a-NON-NPM` (critical), `.b-ORPHANED-OUTER` (high), `.c-ORPHAN
 
 Per-rule reference docs live in [`docs/rules/`](docs/rules/).
 
+## Change-control logging
+
+Every `--fix` run can stream structured NDJSON records to a log file for orchestrators, audit dashboards, or CI archives to consume. Detect-only runs and `--fix` runs **without** `--log-file` emit nothing.
+
+```bash
+override-audit \
+  --fix --with-registry \
+  --attempt-id rem_abc-123 \
+  --source ci \
+  --advisory GHSA-xxxx-yyyy-zzzz \
+  --meta repo=myapp --meta runner=gha \
+  --log-file /var/log/override-audit.log \
+  /path/to/project
+```
+
+One JSON record per line. A run emits in order: `remediation_attempt` (once, with `attemptId`/`source`/`advisory`/`meta` context) → 0..N of `remediation_applied`/`remediation_failed`/`remediation_skipped` interleaved → `remediation_complete` (once, with summary + `exitCode`).
+
+Sample (truncated):
+
+```jsonl
+{"type":"remediation_attempt","attemptId":"rem_abc-123","source":"ci","advisory":"GHSA-xxxx-yyyy-zzzz","meta":{"repo":"myapp","runner":"gha"},"dryRun":false,"projectPath":"/path/to/project",…}
+{"type":"remediation_applied","ruleId":"OA006-COUPLED-PLATFORM-BINARY","package":"postcss","patches":[{"op":"remove","path":"/overrides/postcss"},{"op":"add","path":"/overrides/next","value":">=16.2.6"}],…}
+{"type":"remediation_complete","summary":{"applied":3,"skipped":1,"failed":1,"remainingFindings":1,"newFindings":1},"exitCode":1,…}
+```
+
+### Flags
+
+| Flag | Effect |
+|---|---|
+| `--log-file <path>` | Append NDJSON records to `<path>`. Off by default. |
+| `--log-level <level>` | Threshold: `debug` / `info` / `warn` / `error`. Default `info`. |
+| `--attempt-id <id>` | Externally-supplied attempt ID. Threads through every record. Defaults to `rem_<uuid>`. |
+| `--source <name>` | What initiated the run — e.g. `ci`, `manual`, `scheduled`. |
+| `--advisory <id>` | Link the run to an advisory ID (e.g. `GHSA-xxxx-...`). |
+| `--meta <key=value>` | Repeatable freeform metadata. Gathered onto `remediation_attempt`. |
+
+### Full reference
+
+[`docs/change-control-logging.md`](docs/change-control-logging.md) has the field-by-field schema for every record type, level semantics, consumer recipes (`jq` snippets for advisory aggregation, per-attempt outcomes, streaming with `tail -F`), guarantees (append-only, schema stability), and what's explicitly not logged.
+
+## Programmatic usage
+
+Embed the library directly instead of shelling out:
+
+```ts
+import { scan, fix } from '@hexaxia-labs/override-audit-cli';
+import { FileLogger } from '@hexaxia-labs/override-audit-cli';
+import type { FixReport } from '@hexaxia-labs/override-audit-cli';
+
+const result = await scan('/path/to/project', { withRegistry: true });
+console.log(`${result.findings.length} findings`);
+
+const logger = new FileLogger('/var/log/override-audit.log');
+const report: FixReport = await fix(
+  result,
+  { dryRun: false, rescan: true, severityFloor: 'low', ruleFilters: new Map(), includeSubSuspect: false },
+  'rem_my-attempt-id',
+  logger,
+  { toolVersion: '0.3.0', source: 'my-orchestrator', advisory: 'GHSA-...', meta: { env: 'prod' } },
+);
+logger.close();
+```
+
+See [`docs/architecture.md`](docs/architecture.md) for the full data-flow + extension recipes.
+
 ## Roadmap
 
 - **v0.3.x** — `--install` / `--no-install` (auto-run `npm install` after `--fix`).
