@@ -90,7 +90,6 @@ Emitted per successful patch application. For multi-op patches (e.g. OA006), `pa
   "toolVersion": "0.3.0",
   "level": "info",
   "ruleId": "OA006-COUPLED-PLATFORM-BINARY",
-  "subRuleId": null,                           // present only for OA005 sub-codes
   "package": "postcss",
   "patches": [
     { "op": "remove", "path": "/overrides/postcss" },
@@ -98,6 +97,8 @@ Emitted per successful patch application. For multi-op patches (e.g. OA006), `pa
   ]
 }
 ```
+
+`subRuleId` is present (as a string) only for OA005 findings. For all other rule IDs the field is omitted entirely; consumers should treat its absence as "no sub-code".
 
 ### `remediation_failed`
 
