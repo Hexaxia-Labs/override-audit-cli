@@ -1,24 +1,38 @@
+<p align="center">
+  <a href="https://github.com/Hexaxia-Labs"><img alt="Hexaxia Labs" src="https://img.shields.io/badge/Hexaxia%20Labs-A3E635?style=for-the-badge&labelColor=0B0E14&color=A3E635&logoColor=A3E635"></a>
+</p>
+
 # override-audit-cli
+
+**Hygiene auditor for npm and pnpm package `overrides`.**
 
 [![CI](https://img.shields.io/github/actions/workflow/status/Hexaxia-Labs/override-audit-cli/ci.yml?branch=main&label=CI&logo=github)](https://github.com/Hexaxia-Labs/override-audit-cli/actions/workflows/ci.yml)
 [![release](https://img.shields.io/github/v/release/Hexaxia-Labs/override-audit-cli?display_name=tag&color=blue)](https://github.com/Hexaxia-Labs/override-audit-cli/releases)
-[![license](https://img.shields.io/github/license/Hexaxia-Labs/override-audit-cli?color=43853d)](LICENSE)
-[![tests](https://img.shields.io/badge/tests-200%20passing-43853d?logo=jest&logoColor=white)](#)
-[![detectors](https://img.shields.io/badge/detectors-8-43853d)](docs/rules/)
-[![node](https://img.shields.io/badge/node-%E2%89%A518-43853d?logo=node.js&logoColor=white)](https://nodejs.org)
+[![license](https://img.shields.io/github/license/Hexaxia-Labs/override-audit-cli?color=A3E635)](LICENSE)
+[![tests](https://img.shields.io/badge/tests-200%20passing-A3E635?logo=jest&logoColor=white)](#)
+[![detectors](https://img.shields.io/badge/detectors-8-A3E635)](docs/rules/)
+[![node](https://img.shields.io/badge/node-%E2%89%A518-A3E635?logo=node.js&logoColor=white)](https://nodejs.org)
 [![typescript](https://img.shields.io/badge/typescript-5.x-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 
-Hygiene auditor for npm and pnpm package `overrides` blocks.
+---
 
-`override-audit` catches override hygiene problems that no other tool currently surfaces:
+Most override-hygiene tools cover one dimension: do the version strings look right? That misses the actual failure modes. An override can be syntactically perfect and silently non-functional, or it can look risky but actually be working, or it can be frozen by the lockfile while you believe it's tracking latest. `override-audit-cli` covers eight failure modes across two phases (static analysis of `package.json` and post-install verification of what's actually on disk), then offers to fix what it can.
 
-- **Orphaned override targets**: the package you're pinning isn't in the resolved tree.
-- **Floating-tag pins**: `"latest"` / `"next"` / non-semver pins that defeat the override on every install.
-- **Misplaced sections**: `pnpm.overrides` in an npm project (silently ignored), or vice versa.
-- **Surpassed pins**: the installed version is already newer than your concrete pin.
-- **Ineffective nested overrides**: the npm-only `{ parent: { inner: ver } }` shape, with five sub-conditions covering non-npm, orphaned outer, orphaned inner, leaky, and stylistic-suspect cases.
+| Dimension | What it answers | How |
+|---|---|---|
+| **Presence** | Is the override target actually in the resolved tree? | `OA001` against lockfile |
+| **Pin shape** | Is the version pin meaningful and durable? | `OA002` (floating tags) / `OA004` (surpassed pins) |
+| **Section** | Is the override in the section the package manager actually reads? | `OA003` (npm vs pnpm) |
+| **Nested form** | Does the parent-scoped override actually have something to apply to? | `OA005` (five sub-conditions) |
+| **Parent coupling** | Is the override fighting an exact-pinned parent? | `OA006` (platform-binary coupling) |
+| **Registry drift** | Has `"latest"` quietly resolved to a stale version? | `OA007` (opt-in network) |
+| **Materialized risk** | Is a vulnerable copy still on disk despite the override floor? | `OA008` (recursive node_modules walk) |
 
-**Status:** `v0.3.0` ships detect + fix + structured change-control logging (HexOps-ready). `ScanSource` integration lands in `v1.0.0`.
+A scan blends all of these into a single ranked list of findings. `--fix` applies the RFC 6902 patches detectors emit and rewrites `package.json` atomically. Every step can stream NDJSON change-control records for orchestrator audit trails.
+
+## Status
+
+`v0.3.0` ships detect + fix + structured change-control logging. `HexOps ScanSource` integration lands in `v1.0.0`.
 
 ## Install
 
@@ -32,7 +46,7 @@ Or run without installing:
 npx @hexaxia-labs/override-audit-cli
 ```
 
-## Usage
+## Quick start
 
 ```bash
 override-audit                       # audit cwd
@@ -156,6 +170,10 @@ Two long-open pnpm issues ([#9852](https://github.com/pnpm/pnpm/issues/9852), [#
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for project layout, the detector contract, how to add a new rule, and release conventions. The full change history lives in [CHANGELOG.md](CHANGELOG.md).
+
+## About Hexaxia Labs
+
+`override-audit-cli` is part of [Hexaxia Labs](https://github.com/Hexaxia-Labs), the open source arm of the [Hexaxia Group](https://www.hexaxia.com). Infrastructure tooling and security baselines from [Hexaxia Technologies](https://www.hexaxia.tech), AI infrastructure work from [Hexaxia AI](https://www.hexaxia.ai), made general enough to be useful elsewhere.
 
 ## License
 
