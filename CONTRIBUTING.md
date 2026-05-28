@@ -26,27 +26,40 @@ src/
     package-manager.ts        Detects npm vs pnpm by lockfile mtime
     package-json.ts           Reads package.json + flattens overrides into entries
     lockfile.ts               Extracts package names from lockfile (npm + pnpm v6/v9)
-    node-modules.ts           Reads installed versions and manifests
+    node-modules.ts           Reads installed versions and manifests (top-level only)
+    installed-tree.ts         Recursive walker: every copy of every pkg + parent-of map
+    registry.ts               Opt-in registry.npmjs.org client (dist-tags)
   detectors/
     orphan.ts                 OA001 — pure function (ctx: Context) => Finding[]
     floating-tag.ts           OA002
     wrong-section.ts          OA003
     installed-newer.ts        OA004
     nested-override.ts        OA005 (five sub-codes in one detector)
+    coupled-platform-binary.ts OA006 (emits multi-op patches)
+    frozen-latest.ts          OA007 (needs --with-registry)
+    vulnerable-twin.ts        OA008 (suggest-only; structural investigation)
+    platform-binary.ts        Heuristic helper used by OA006 severity tiering
   output/
     human.ts                  Plain-text terminal renderer
-    json.ts                   schemaVersion: '1' renderer (consumed by HexOps)
+    json.ts                   schemaVersion: '1' renderer (HexOps-ready)
   fixer/
-    json-pointer.ts           RFC 6901 path encoding (used by detector patches)
+    json-pointer.ts           RFC 6901 path encoding
+    apply.ts                  RFC 6902 applier (remove/replace/move/add)
+    write.ts                  Indent detection + atomic package.json write
+    fix.ts                    Orchestrator: filter → apply → rescan → diff
+  logging/
+    change-control.ts         NDJSON change-control logger (HexOps records)
   cli/
     args.ts                   Hand-rolled arg parser (no commander/yargs)
     help.ts                   Static HELP_TEXT
     index.ts                  Bin entrypoint — run(argv, io)
 tests/
-  parsers/        detectors/        output/        cli/
+  parsers/        detectors/        output/        cli/        fixer/        logging/
   fixtures/       __snapshots__/    *.test.ts
 docs/
-  rules/                      Per-rule reference docs (OA001.md … OA005.md)
+  rules/                      Per-rule reference docs (OA001.md … OA008.md)
+  architecture.md             Data flow + extension points
+  change-control-logging.md   NDJSON record schema reference
 ```
 
 ## The detector contract
@@ -105,13 +118,16 @@ When in doubt about what the tool should do on a given project, dogfood it befor
 - Releases are tagged `vX.Y.Z`. The CHANGELOG should be updated as part of the release commit.
 
 ```bash
-# Example release
-npm version 0.2.0 --no-git-tag-version    # bumps package.json only
-# update CHANGELOG.md
-git add package.json package-lock.json CHANGELOG.md
-git commit -m "chore(release): v0.2.0"
-git tag v0.2.0 -m "v0.2.0 — Fix"
+# Example release flow
+npm version <next-version> --no-git-tag-version   # bumps package.json + lock only
+# update CHANGELOG.md (move [Unreleased] content under the new version heading)
+# update README badges (version + test count if changed)
+npm run build && npm test                          # one final verification
+git add -A
+git commit -m "chore(release): v<next-version>"
+git tag v<next-version> -m "v<next-version> — <short summary>"
 git push && git push --tags
+gh release create v<next-version> --notes-from-tag --latest
 ```
 
 ## Issue triage
@@ -122,3 +138,9 @@ git push && git push --tags
 ## Code style
 
 The TypeScript config is strict (`"strict": true`) and ESM (`"module": "NodeNext"`). There's no separate formatter — `tsc` is the only build step. Match the surrounding style; small files; no defensive checks for impossible states.
+
+## Reference docs
+
+- [`docs/architecture.md`](docs/architecture.md) — how data flows from raw filesystem state to findings/fixes/logs. Read this before adding a new detector or extending the fixer.
+- [`docs/change-control-logging.md`](docs/change-control-logging.md) — NDJSON record schema. Read this if you're building a consumer (HexOps adapter, log shipper, audit dashboard).
+- [`docs/rules/`](docs/rules/) — per-rule reference (one file per OA00N).

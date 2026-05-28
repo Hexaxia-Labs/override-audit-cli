@@ -1,6 +1,6 @@
 # Rules
 
-Reference docs for the eight rules in v0.1.1.
+Reference docs for the eight rules shipping in v0.3.0.
 
 | Rule | Severity | Action | Doc |
 |---|---|---|---|

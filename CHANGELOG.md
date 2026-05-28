@@ -6,7 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-Nothing yet. See the [roadmap in README.md](README.md#roadmap) for what's next.
+### Documentation
+- New: [`docs/architecture.md`](docs/architecture.md) — data-flow diagram, design invariants, recipe for adding a new detector / extending the fixer. Aimed at contributors and embedders.
+- New: [`docs/change-control-logging.md`](docs/change-control-logging.md) — full NDJSON record schema with field-by-field reference, consumer recipes (`jq` examples), and guarantees. Aimed at log consumers (HexOps adapters, dashboards).
+- Updated `docs/rules/OA001.md` / `OA002.md` / `OA003.md` / `OA004.md` — replaced stale "coming in v0.2.0" notes with current `--fix` usage; OA004 now distinguishes safe `remove` vs cross-major `suggest` behavior.
+- Updated `docs/rules/README.md` header — points at v0.3.0 instead of v0.1.1.
+- Updated `CONTRIBUTING.md` — project layout now lists every current source file (added `src/logging/`, the new detectors, expanded `src/fixer/`); release-flow example generalized; added a Reference docs section linking to the new docs.
 
 ## [0.3.0] — 2026-05-27
 
