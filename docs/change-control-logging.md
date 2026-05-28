@@ -16,7 +16,7 @@ override-audit \
   /path/to/project
 ```
 
-Each line of `/var/log/override-audit.log` is exactly one JSON record (NDJSON / JSON Lines). The file is **append-only** — consecutive runs accumulate. Consumers should parse line-by-line.
+Each line of `/var/log/override-audit.log` is exactly one JSON record (NDJSON / JSON Lines). The file is **append-only**; consecutive runs accumulate. Consumers should parse line-by-line.
 
 ## Lifecycle
 
@@ -79,7 +79,7 @@ Emitted once at the start, before any patch is attempted.
 
 ### `remediation_applied`
 
-Emitted per successful patch application. For multi-op patches (e.g. OA006), `patches` contains all ops as a single record — they're applied atomically.
+Emitted per successful patch application. For multi-op patches (e.g. OA006), `patches` contains all ops as a single record; they're applied atomically.
 
 ```jsonc
 {
@@ -101,7 +101,7 @@ Emitted per successful patch application. For multi-op patches (e.g. OA006), `pa
 
 ### `remediation_failed`
 
-Emitted when a patch errors during application — typically because an earlier patch removed or modified the target path.
+Emitted when a patch errors during application. This typically happens because an earlier patch removed or modified the target path.
 
 ```jsonc
 {
@@ -121,10 +121,10 @@ Emitted when a patch errors during application — typically because an earlier 
 
 Emitted when a finding doesn't qualify for auto-fix:
 
-- `suggest`-only (no patch) — `level: info`
-- Below severity floor — `level: debug`
-- Filtered by `--rule X=off` — `level: debug`
-- `OA005.e-SUSPECT` without `--include-sub-suspect` — `level: debug`
+- `suggest`-only (no patch): `level: info`
+- Below severity floor: `level: debug`
+- Filtered by `--rule X=off`: `level: debug`
+- `OA005.e-SUSPECT` without `--include-sub-suspect`: `level: debug`
 
 ```jsonc
 {
@@ -142,7 +142,7 @@ Emitted when a finding doesn't qualify for auto-fix:
 
 ### `remediation_complete`
 
-Emitted once at the end with totals + the inferred exit code.
+Emitted once at the end with totals and the inferred exit code.
 
 ```jsonc
 {
@@ -169,10 +169,10 @@ Emitted once at the end with totals + the inferred exit code.
 |---|---|
 | `debug` | `remediation_skipped` for below-floor / filtered findings |
 | `info` | All `remediation_attempt`, `remediation_applied`, `remediation_complete`, and `remediation_skipped` for suggest-only |
-| `warn` | (reserved — no records currently emit this) |
+| `warn` | (reserved; no records currently emit this) |
 | `error` | `remediation_failed` |
 
-`--log-level <level>` drops records below the threshold. Default is `info` — debug-level skips are hidden unless you ask for them.
+`--log-level <level>` drops records below the threshold. Default is `info`; debug-level skips are hidden unless you ask for them.
 
 ## Consumer recipes
 

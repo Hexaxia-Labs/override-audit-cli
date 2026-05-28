@@ -49,7 +49,7 @@ A reference for contributors and embedders. Explains how a single `override-audi
 
 ## Design invariants
 
-1. **Detectors are pure.** Every detector has signature `(ctx: Context) => Finding[]`. No I/O. All filesystem reads happen during `Context` construction in `scanner.ts`. This makes detector tests trivial — construct a literal `Context`, call the detector, assert.
+1. **Detectors are pure.** Every detector has signature `(ctx: Context) => Finding[]`. No I/O. All filesystem reads happen during `Context` construction in `scanner.ts`. This makes detector tests trivial: construct a literal `Context`, call the detector, assert.
 
 2. **Read the filesystem once.** `scanner.ts` reads package.json, the lockfile, top-level node_modules manifests, and (when needed) the recursive `node_modules` tree once per scan. Detectors share that data via `Context`.
 
@@ -106,23 +106,23 @@ interface Finding {
 
 1. **Pick a rule id.** Next sequential code: `OA00<N>-<SHORT-NAME>`.
 2. **Add to the `RuleId` union** in `src/types.ts`.
-3. **Add `Context` fields** if you need new pre-computed state (rare — most detectors use what's already there).
+3. **Add `Context` fields** if you need new pre-computed state (rare; most detectors use what's already there).
 4. **Write the test first.** Construct a `Context` literal, exercise the detector, assert finding shape. Mock data is easier than fixtures here.
 5. **Implement the detector** as `(ctx: Context) => Finding[]`.
-6. **Wire into `scanner.ts`** in stable order (existing OA001…OA008 order).
+6. **Wire into `scanner.ts`** in stable order (existing OA001 to OA008 order).
 7. **Write the docs:** `docs/rules/OA00<N>.md` following the existing template.
 8. **Update** `docs/rules/README.md` table, `src/cli/help.ts` `DETECTORS` section, `CHANGELOG.md`.
 
 ## Extending the fixer
 
-The fixer is intentionally simple — it consumes the `patches` field that detectors already emit. To make a `suggest`-only rule auto-fixable:
+The fixer is intentionally simple: it consumes the `patches` field that detectors already emit. To make a `suggest`-only rule auto-fixable:
 
 1. **Emit the patch.** Set `remediation.patch` (single-op) or `remediation.patches` (multi-op array). Change `remediation.action` from `'suggest'` to the appropriate verb.
 2. **Test it.** Add a test that exercises the new patch shape; verify `fix.ts` applies it.
 3. **Document the upgrade** in the rule's `docs/rules/OA00N.md` and the CHANGELOG.
 
-OA006 is the canonical multi-op example (remove + add). OA008 stays `suggest`-only because no deterministic patch exists — the fix is structural.
+OA006 is the canonical multi-op example (remove + add). OA008 stays `suggest`-only because no deterministic patch exists; the fix is structural.
 
 ## Embedding the library
 
-Embedders should import from `src/index.ts` only — internal modules can change without notice. See [`docs/change-control-logging.md`](change-control-logging.md) for the log record schema if you're consuming `--log-file` output programmatically.
+Embedders should import from `src/index.ts` only. Internal modules can change without notice. See [`docs/change-control-logging.md`](change-control-logging.md) for the log record schema if you're consuming `--log-file` output programmatically.
