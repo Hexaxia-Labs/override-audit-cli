@@ -9,3 +9,6 @@ coverage/
 
 # Local-only superpowers spec/plan drafts (kept out of public repo)
 docs/superpowers/
+
+# Reference clone of OWASP/cve-lite-cli for in-tree consultation during the merge work
+cve-lite-ref/
