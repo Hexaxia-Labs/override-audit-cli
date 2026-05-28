@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/Hexaxia-Labs"><img alt="Hexaxia Labs" src="https://img.shields.io/badge/Hexaxia%20Labs-A3E635?style=for-the-badge&labelColor=0B0E14&color=A3E635&logoColor=A3E635"></a>
+  <a href="https://github.com/Hexaxia-Labs"><img src="docs/assets/HL_logo.png" alt="Hexaxia Labs" width="400"></a>
 </p>
 
 # override-audit-cli
