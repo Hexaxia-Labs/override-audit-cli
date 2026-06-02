@@ -159,6 +159,85 @@ Plan 1 confirms the foundation primitives behave correctly and the type system i
 - Existing cve-lite behavior identical
 - The audit log, overrides module, and verify-failed exit code 2 are all wired in but no caller invokes them until Plan 3 + Plan 4
 
+## Pre-Plan-2 sanity check: preserved override-audit suite
+
+Before touching Plan 2, ran the original override-audit test suite directly against the preserved source tree to confirm the detection logic the merge is bringing across is intact and produces the behaviors the spec assumes.
+
+The preserved tree (`_preserved-override-audit/`) is self-contained: own `package.json`, own `jest.config.mjs`, own `tsconfig.json`. After `npm install` in that directory it runs as a standalone project.
+
+```
+$ cd _preserved-override-audit && npm install
+added 154 packages
+
+$ npm test -- --testPathIgnorePatterns='tests/cli-integration.test.ts'
+Test Suites: 29 passed, 29 total
+Tests:       194 passed, 194 total
+Snapshots:   1 passed, 1 total
+Time:        1.737 s
+```
+
+The CLI integration test (`tests/cli-integration.test.ts`, 6 tests) was excluded because it shells out to a built binary at `dist/cli/index.js`. `npm run build` OOM-killed on this machine (exit 137); not a code problem, and not relevant to detector logic - the CLI integration tests only verify exit codes and stdout shape, not detection behavior.
+
+### Preserved suite breakdown
+
+**Detectors (53 tests across 8 files plus a parameterized helper)**
+
+| Detector | Source under test | Tests |
+|---|---|---|
+| OA001 orphan | `src/detectors/orphan.ts` | 5 |
+| OA002 floating-tag | `src/detectors/floating-tag.ts` | 5 |
+| OA003 wrong-section | `src/detectors/wrong-section.ts` | 4 |
+| OA004 installed-newer | `src/detectors/installed-newer.ts` | 8 |
+| OA005 nested-override | `src/detectors/nested-override.ts` | 6 |
+| OA006 coupled-platform-binary | `src/detectors/coupled-platform-binary.ts` | 9 |
+| OA007 frozen-latest | `src/detectors/frozen-latest.ts` | 9 |
+| OA008 vulnerable-twin | `src/detectors/vulnerable-twin.ts` | 7 |
+| `looksLikePlatformBinary` helper | `src/detectors/platform-binary.ts` | parameterized `it.each` (15+ cases) |
+
+**Composite logic (2 files)**
+
+- `scanner.test.ts` - orchestration: context build, detector dispatch, skip behavior on missing lockfile / node_modules
+- `scanner-composite.test.ts` - OA005-vs-OA001 dedup and OA006 severity escalation when OA008 confirms (the rules that move into `src/overrides/composite.ts` in Plan 3)
+
+**Fixer (4 files)**
+
+- `fix.test.ts` - top-level fix orchestration: dry-run, rescan, severity-floor filter
+- `fixer/apply.test.ts` - RFC 6902 patch application
+- `fixer/json-pointer.test.ts` - JSON pointer encoding (forward port to `src/overrides/parsing/json-pointer.ts` in Plan 2)
+- `fixer/write.test.ts` - atomic package.json write with indent detection
+
+**Parsers (6 files)**
+
+- `parsers/installed-tree.test.ts`
+- `parsers/lockfile.test.ts`
+- `parsers/node-modules.test.ts`
+- `parsers/package-json.test.ts` - the override-entry extraction Plan 2 Task 3 ports
+- `parsers/package-manager.test.ts`
+- `parsers/registry.test.ts` - OA007 dist-tags fetch
+
+**Output, logging, CLI args, types (8 files)**
+
+- `output/human.test.ts`, `output/json.test.ts`, `output-snapshot.test.ts`
+- `logging/change-control.test.ts` - the NDJSON logger that informed Plan 1's audit-log module (note: cve-lite's audit-log is broader scope, not a port)
+- `cli/args.test.ts`, `cli/help.test.ts`, `cli/index.test.ts` - args parser unit tests (do not need the built binary)
+- `types.test.ts`
+
+### What this sanity check confirms
+
+- **All eight OA detectors produce findings.** The detection logic that Plan 2 ports is currently working as designed. 53 detector-level assertions pass.
+- **Composite passes work.** OA005-vs-OA001 dedup and OA006 escalation behave correctly; these move to `src/overrides/composite.ts` in Plan 3.
+- **The fixer applies RFC 6902 patches correctly.** Plan 3 ports this.
+- **The parsers extract overrides and traverse node_modules correctly.** Plan 2 Task 3 ports these as `src/overrides/parsing/*`.
+
+### Behavioral baseline for Plan 2
+
+Plan 2 must preserve all 194 of these behaviors after the port, with two known transformations:
+
+1. **Type shapes change:** old `Finding` becomes `OverrideFinding`; old `Context` becomes `OverrideContext`. Assertions in the migrated tests update to match.
+2. **`semver` calls replaced** by cve-lite's `src/utils/version.ts` extensions (Plan 2 Task 1). Behavior preserved; implementation swapped.
+
+Plan 2's full-suite gate (Task 14) is the first commit where the migrated detector behaviors are verified inside cve-lite-cli's test infrastructure. Expectation: 194 preserved tests migrate to the new shapes and all pass in `tests/overrides/`.
+
 ## Ready for Plan 2
 
 The detector migration plan picks up next: porting 8 OA detectors from `_preserved-override-audit/src/detectors/` into `src/overrides/detectors/`, with the `semver` calls replaced by the cve-lite version utilities Plan 2 Task 1 will add. After Plan 2 the detectors are callable as library functions; CLI and verify integration arrive in Plans 3 and 4.
