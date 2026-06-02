@@ -54,7 +54,7 @@ describe('OA001-ORPHAN-TARGET', () => {
     expect(findings[0]!.package.name).toBe('@scope/gone');
   });
 
-  it('skips when lockfile is empty (signal: skipped via Context — not this detectors job to add a finding)', () => {
+  it('skips when lockfile is empty (signal: skipped via Context - not this detectors job to add a finding)', () => {
     // Empty lockfile means we can't reliably tell. Detector returns no findings;
     // graceful-degradation note is added by the scanner via skippedDetectors.
     const ctx = ctxOf([flat('something', '1.0.0')], []);
