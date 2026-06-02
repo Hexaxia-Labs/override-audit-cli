@@ -76,6 +76,51 @@ $ npx tsc --noEmit
 (no output, exit 0)
 ```
 
+## Scope of Plan 1 testing - what is and is not covered
+
+**Be explicit:** Plan 1's tests cover the foundation primitives only. The override-audit behavior the merge is bringing across has not been exercised in this branch yet.
+
+### What the 16 Plan 1 tests actually exercise
+
+| Test file | Tests | Real behavior under test |
+|---|---|---|
+| `tests/audit-log/events.test.ts` | 3 | Discriminated-union shapes - compile-time type checking only |
+| `tests/audit-log/no-op.test.ts` | 3 | Trivial runtime: `emit()` returns undefined, `close()` returns undefined, `isNoOp === true` |
+| `tests/audit-log/ndjson-writer.test.ts` | 4 | Real filesystem I/O: writes one JSON object per line, appends without truncating, throws on emit-after-close |
+| `tests/audit-log/integration.test.ts` | 2 | Real round-trip: `createAuditLog(path)` factory writes events to disk and they parse back equal |
+| `tests/overrides/types.test.ts` | 4 | Discriminated-union shapes - compile-time type checking only |
+
+In total, six of the sixteen tests do meaningful runtime work (filesystem writes + round-trip); ten verify type shapes that TypeScript enforces at compile time.
+
+### What the 360 pre-existing tests cover
+
+cve-lite's own test suite, exercising its existing scan, parsers, OSV pipeline, output formatters, and remediation logic. They confirm Plan 1's changes did not regress cve-lite's pre-existing behavior. **None of them touch override-audit logic** because cve-lite does not have any override-audit logic yet.
+
+### What is NOT tested in this branch
+
+- **None of the eight OA detectors** (OA001 - OA008). Their source still lives in `_preserved-override-audit/src/detectors/`; it has not been ported into `src/overrides/detectors/` yet.
+- **No `buildOverrideContext()` behavior.** The context-builder adapter does not exist yet.
+- **No `audit()` or `verify()` entrypoints.** The public API surface from spec section "Integration Seams" is not built.
+- **No end-to-end finding production.** A real `package.json` with an orphaned override would not produce a finding in this branch.
+- **No regression coverage against Sonu's known-positive fixtures** (Analog OA006, Ghost two-orphan, Prisma OA001). Those are dogfood targets defined in Plan 6; we cannot run them until Plan 2 finishes the detector port and Plan 3 wires up `audit()`.
+
+### Where the behavioral coverage comes from
+
+The preserved tree contains the original behavioral coverage:
+
+- `_preserved-override-audit/tests/detectors/*.test.ts` - per-detector behavioral tests
+- `_preserved-override-audit/tests/scanner.test.ts` - composite scan tests
+- `_preserved-override-audit/tests/scanner-composite.test.ts` - OA005-vs-OA001 dedup and OA006/OA008 escalation tests
+- `_preserved-override-audit/tests/fix.test.ts` - fixer tests
+- `_preserved-override-audit/tests/fixer/*.test.ts` - per-fix-component tests
+- `_preserved-override-audit/tests/fixtures/` - the project-shaped inputs the detectors are exercised against
+
+These tests are not currently runnable in the repo root - they reference `_preserved-override-audit/src/types.ts`, `_preserved-override-audit/src/scanner.ts`, etc., not the new shapes Plan 1 introduced. Plan 2 Tasks 5-12 migrate each test alongside its detector, rewriting imports and assertion shapes so they exercise the new `OverrideContext` and `OverrideFinding`. Plan 2's full-suite gate (Task 14) is the first commit where any OA detector behavior is verified in this branch.
+
+### Plain summary
+
+Plan 1 confirms the foundation primitives behave correctly and the type system is wired right. It does **not** confirm override-audit's detection logic survived the move - that confirmation lands progressively across Plans 2, 3, and 6.
+
 ## Plan 1 task ledger
 
 | Task | Status | Notes |
