@@ -200,15 +200,46 @@ The preserved override-audit suite (`_preserved-override-audit/`) reported **194
 
 The detector + helper coverage from the preserved suite is fully ported. The composite, fixer, output, and CLI coverage lands in Plans 3-5.
 
-## Pre-Plan-3 sanity check options (not yet run)
+## Pre-Plan-3 sanity check (executed)
 
-The user asked whether Plan 2 had a sanity test parallel to Plan 1's. It did not, beyond the migrated tests themselves. If a more rigorous behavioral confirmation is wanted before Plan 3, options are:
+Two additional harnesses were run after the Plan 2 gate to confirm behavioral equivalence and real-project plausibility before Plan 3 starts. Both committed to the branch at `a2f467c`.
 
-1. **Side-by-side detector output comparison.** For each preserved detector fixture, build both the old `Context` and the new `OverrideContext`, run both `detect()` implementations, assert on equal-or-equivalent findings. This would prove bit-for-bit equivalence within the limits of the test fixtures. Effort: a few hours of test scaffolding.
-2. **Run against a real project.** Build the registry harness manually and run `ALL_DETECTORS` over `hexmetrics`, then compare the results against what the preserved `override-audit` binary produces. This is the same dogfood Plan 6 would run, just earlier.
-3. **Skip and rely on migrated tests.** The 87 detector tests reflect the same behavioral assertions the preserved tests made, just on the new shape. If the assertions match the preserved fixtures' intent, that is meaningful coverage.
+### Harness 1: port equivalence (`tests/sanity/port-equivalence.test.ts`)
 
-Pick whichever level of pre-Plan-3 confidence makes sense.
+Imports both preserved (`_preserved-override-audit/src/detectors/`) and ported (`src/overrides/detectors/`) `detect()` functions in the same Jest test file. For each detector, runs both implementations over an identical synthetic fixture and asserts equivalent findings after normalizing for the intentional shape changes:
+
+- preserved `ruleId: "OA001-ORPHAN-TARGET"` -> shortened to `"OA001"`
+- preserved `package: "name"` (string) -> normalized from new `package: { name }`
+- fix-op comparison: preserved `remediation.patch.op` (or `remediation.patches[0].op`) -> new `fix.patch[0].op`
+- severity intentionally ignored (spec corrected OA001 low->high and OA007 high->low)
+
+Results: 7 of 7 equivalence tests pass. Covers OA001/OA002/OA003/OA004/OA006/OA007/OA008. OA005 omitted because its 5 sub-rule codes diverge between preserved (long form like `OA005.a-NON-NPM`) and new (short form `OA005.a`); its 14 migrated tests cover the same fixture intent. A follow-up could add a normalized OA005 pass.
+
+### Harness 2: real-project dogfood (`tests/sanity/dogfood.test.ts`)
+
+Builds a real `OverrideContext` via `buildOverrideContext()` against three on-disk projects, iterates `ALL_DETECTORS`, prints structured findings, asserts plausible counts.
+
+| Project | Overrides | node_modules | Total findings | Hits |
+|---|---|---|---|---|
+| `cve-lite-ref/examples/ghost` (pnpm) | 52 | absent | 5 | OA001 x4 (orphans: `ember-svg-jar>cheerio`, `juice>cheerio`, two `eslint-plugin-ghost>` entries); OA002 x1 (`@tryghost/logging` pinned to `"catalog:"`) |
+| `cve-lite-ref/examples/prisma` (pnpm) | 10 | absent | 1 | OA001 x1 (`@azure/msal-node>uuid` orphan) |
+| `~/Projects/hexmetrics` (pnpm) | 2 | present | 1 | OA006 x1 (`postcss` override fights an exact-pinned parent) |
+
+On Ghost and Prisma `node_modules` was absent, so OA004/OA006/OA008 were pre-skipped by the context builder. On hexmetrics all 8 detectors ran.
+
+**Sonu's 2026-06-01 known-positive findings reproduce exactly:**
+
+- Ghost: `ember-svg-jar>cheerio` and `juice>cheerio` both flagged as OA001 orphans (Sonu reported "two orphaned nested Cheerio overrides"; we see those plus two additional `eslint-plugin-ghost>` orphans she may not have called out)
+- Prisma: `@azure/msal-node>uuid` flagged as OA001 (Sonu reported "1 orphaned override")
+- hexmetrics: new OA006 finding on postcss, not previously reported but plausible (postcss override is `8.5.15` while postcss is pinned by other deps)
+
+### What the sanity check did NOT prove
+
+- **Analog example not exercised.** Sonu's third Ghost-tier finding was on Analog; that example is not present in the `cve-lite-ref` snapshot at our rebased baseline. If Sonu re-confirmed against a later cve-lite ref, we would catch it in Phase 2 group testing.
+- **OA005 equivalence not in the side-by-side.** Covered by migrated tests but not by the new harness. Tracking as a small follow-up.
+- **`audit()` / `verify()` / fix-runner not exercised.** Those land in Plan 3.
+
+After the sanity checks the full suite is 515 tests, 44 suites, all green. tsc clean.
 
 ## Ready for Plan 3
 
