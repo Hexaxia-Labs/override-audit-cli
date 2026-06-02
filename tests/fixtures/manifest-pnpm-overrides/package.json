@@ -1,0 +1,5 @@
+{
+  "name": "pnpm-only",
+  "version": "0.0.0",
+  "pnpm": { "overrides": { "postcss": "8.5.15" } }
+}

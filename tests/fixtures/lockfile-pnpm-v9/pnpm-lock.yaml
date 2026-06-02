@@ -1,0 +1,21 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+
+packages:
+
+  '@alloc/quick-lru@5.2.0':
+    resolution: {integrity: sha512-fake}
+
+  '@biomejs/biome@2.4.15':
+    resolution: {integrity: sha512-fake}
+
+  '@radix-ui/react-dialog@1.1.15(react@19.2.6)':
+    resolution: {integrity: sha512-fake}
+
+  accepts@2.0.0:
+    resolution: {integrity: sha512-fake}
+
+  ajv@8.20.0:
+    resolution: {integrity: sha512-fake}
