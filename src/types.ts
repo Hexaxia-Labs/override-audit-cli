@@ -182,3 +182,34 @@ export type ParsedOptions = {
   cdx?: boolean;
   caCert?: string;
 };
+
+/**
+ * Exit codes used by the CLI.
+ *
+ * 0 - no findings above --fail-on threshold
+ * 1 - findings present (CVE or override) above threshold
+ * 2 - --fix applied but verify() detected the fix did not take
+ *     (operationally distinct from 1: "fix ran but did not work")
+ * 3 - tool error (unhandled exception, unreadable lockfile, etc.)
+ */
+export const EXIT_OK = 0 as const;
+export const EXIT_FINDINGS = 1 as const;
+export const EXIT_VERIFY_FAILED = 2 as const;
+export const EXIT_ERROR = 3 as const;
+
+export type ExitCode =
+  | typeof EXIT_OK
+  | typeof EXIT_FINDINGS
+  | typeof EXIT_VERIFY_FAILED
+  | typeof EXIT_ERROR;
+
+// Re-export override and audit-log surface for consumers that import from src/types.
+export type {
+  OverrideFinding,
+  OverrideRuleId,
+  OverrideSubRuleId,
+  OverrideFix,
+  RFC6902Op,
+} from "./overrides/index.js";
+
+export type { AuditEvent, AuditLogHandle } from "./audit-log/index.js";
