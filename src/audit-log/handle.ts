@@ -17,3 +17,14 @@ export class NullAuditLog implements AuditLogHandle {
 }
 
 export const NULL_AUDIT_LOG: AuditLogHandle = new NullAuditLog();
+
+/**
+ * In-memory audit log used by tests to assert event sequences. Captures every
+ * emit; close is a no-op.
+ */
+export class MemoryAuditLog implements AuditLogHandle {
+  readonly isNoOp = false;
+  readonly events: AuditEvent[] = [];
+  emit(event: AuditEvent): void { this.events.push(event); }
+  close(): void { /* noop */ }
+}

@@ -1,7 +1,7 @@
 export type { AuditEvent, AuditEventType } from "./events.js";
 export { AUDIT_LOG_SCHEMA_VERSION } from "./events.js";
 export type { AuditLogHandle } from "./handle.js";
-export { NullAuditLog, NULL_AUDIT_LOG } from "./handle.js";
+export { NullAuditLog, NULL_AUDIT_LOG, MemoryAuditLog } from "./handle.js";
 export { NdjsonAuditLog } from "./ndjson-writer.js";
 
 import type { AuditLogHandle } from "./handle.js";
