@@ -6,7 +6,7 @@
 
 **Architecture:** Detectors stay pure functions: `detect(ctx: OverrideContext): OverrideFinding[]`. A new `buildOverrideContext()` adapter fills `OverrideContext` from cve-lite's parser outputs (`src/parsers/package-json.ts`, `src/parsers/npm-lock-graph.ts`, etc.). Composite logic from the original `_preserved-override-audit/src/scanner.ts` (OA005 vs OA001 dedup, OA006 severity escalation when OA008 confirms) moves into the runner alongside the detectors but stays out of individual detector bodies.
 
-**Tech Stack:** TypeScript, Jest. Adds `semver` (^7.6.0) as a runtime dependency for OA002/OA004 version-range work.
+**Tech Stack:** TypeScript, Jest. **No new runtime dependencies** (cve-lite principle). The original OA detectors imported `semver`; the port replaces those calls with cve-lite's `src/utils/version.ts`, which we extend with the three operations it does not yet cover (`coerceVersion`, `satisfiesRange`, `isValidRange`, plus a trivial `majorVersion`).
 
 **Spec reference:** `docs/merge/2026-05-28-cve-lite-merge-design.md` sections "Code Organization", "Layering Plan", "Integration Seams".
 
@@ -36,7 +36,7 @@ Create:
 - `tests/overrides/context-builder.test.ts`
 
 Modify:
-- `package.json` - add `semver` to dependencies (verify it's not already there from cve-lite)
+- `src/utils/version.ts` - extend with `coerceVersion`, `satisfiesRange`, `isValidRange`, `majorVersion` (no new runtime deps; replaces the OA detectors' semver calls)
 - `src/overrides/index.ts` - re-export the detector registry and `OverrideContext`
 
 Reference (read-only, do not modify):
@@ -47,29 +47,254 @@ Reference (read-only, do not modify):
 
 ---
 
-## Task 1: Verify `semver` dependency status
+## Task 1: Extend `src/utils/version.ts` with the operations OA detectors need
 
-**Files:** `package.json`
+cve-lite's principle is no new runtime dependencies. cve-lite's existing `src/utils/version.ts` already exposes `looksLikeVersion`, `compareVersions`, `parseExactManifestVersion`, `isMajorVersionBump`, `isPreReleaseVersion`, and `normalizeRawVersion`. The OA detectors collectively call **eight** semver methods - five of them map onto the existing version utilities; **three** are gaps we close in this task: `coerceVersion`, `satisfiesRange`, `isValidRange`. Plus a trivial `majorVersion` helper for OA006.
 
-- [ ] **Step 1: Check current deps**
+Mapping (for reference):
 
-```bash
-node -e "const p=require('./package.json'); console.log('dep:', p.dependencies?.semver, 'devDep:', p.devDependencies?.semver)"
+| Original semver call | Replacement |
+|---|---|
+| `semver.valid(v)` | `looksLikeVersion(v)` (existing) |
+| `semver.gt(a, b)` | `compareVersions(a, b) > 0` (existing) |
+| `semver.lt(a, b)` | `compareVersions(a, b) < 0` (existing) |
+| `semver.rcompare(a, b)` | `compareVersions(b, a)` (existing, args swapped) |
+| `semver.major(v)` | `majorVersion(v)` (new, trivial) |
+| `semver.coerce(s)` | `coerceVersion(s)` (new) |
+| `semver.satisfies(v, r)` | `satisfiesRange(v, r)` (new) |
+| `semver.validRange(r)` | `isValidRange(r)` (new) |
+
+**Files:**
+- Modify: `src/utils/version.ts`
+- Test: `tests/utils/version-extensions.test.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+`tests/utils/version-extensions.test.ts`:
+```ts
+import {
+  coerceVersion,
+  satisfiesRange,
+  isValidRange,
+  majorVersion,
+} from "../../src/utils/version.js";
+
+describe("majorVersion", () => {
+  it("returns the leading integer", () => {
+    expect(majorVersion("4.17.21")).toBe(4);
+    expect(majorVersion("0.25.12-beta.1")).toBe(0);
+  });
+  it("returns null for non-versions", () => {
+    expect(majorVersion("latest")).toBeNull();
+    expect(majorVersion("")).toBeNull();
+  });
+});
+
+describe("coerceVersion", () => {
+  it("returns concrete versions unchanged", () => {
+    expect(coerceVersion("1.2.3")).toBe("1.2.3");
+  });
+  it("expands short forms to X.Y.Z", () => {
+    expect(coerceVersion("1")).toBe("1.0.0");
+    expect(coerceVersion("1.2")).toBe("1.2.0");
+  });
+  it("strips range operators", () => {
+    expect(coerceVersion("^1.2.3")).toBe("1.2.3");
+    expect(coerceVersion("~2.4")).toBe("2.4.0");
+    expect(coerceVersion(">=3.1.0")).toBe("3.1.0");
+  });
+  it("returns null for non-numeric input", () => {
+    expect(coerceVersion("latest")).toBeNull();
+    expect(coerceVersion("")).toBeNull();
+  });
+});
+
+describe("isValidRange", () => {
+  it("accepts plain versions", () => {
+    expect(isValidRange("1.2.3")).toBe(true);
+  });
+  it("accepts caret, tilde, comparators", () => {
+    expect(isValidRange("^1.2.3")).toBe(true);
+    expect(isValidRange("~1.2")).toBe(true);
+    expect(isValidRange(">=2.0.0")).toBe(true);
+    expect(isValidRange("<3.0.0")).toBe(true);
+    expect(isValidRange("=1.0.0")).toBe(true);
+  });
+  it("rejects garbage and tags", () => {
+    expect(isValidRange("latest")).toBe(false);
+    expect(isValidRange("")).toBe(false);
+    expect(isValidRange("not-a-version")).toBe(false);
+  });
+});
+
+describe("satisfiesRange", () => {
+  it("exact match", () => {
+    expect(satisfiesRange("1.2.3", "1.2.3")).toBe(true);
+    expect(satisfiesRange("1.2.4", "1.2.3")).toBe(false);
+  });
+  it("caret: same major, >= specified", () => {
+    expect(satisfiesRange("1.2.3", "^1.2.0")).toBe(true);
+    expect(satisfiesRange("1.9.9", "^1.2.0")).toBe(true);
+    expect(satisfiesRange("2.0.0", "^1.2.0")).toBe(false);
+    expect(satisfiesRange("1.1.0", "^1.2.0")).toBe(false);
+  });
+  it("tilde: same major.minor, >= specified patch", () => {
+    expect(satisfiesRange("1.2.5", "~1.2.3")).toBe(true);
+    expect(satisfiesRange("1.3.0", "~1.2.3")).toBe(false);
+  });
+  it("comparators", () => {
+    expect(satisfiesRange("2.0.0", ">=1.0.0")).toBe(true);
+    expect(satisfiesRange("0.9.0", ">=1.0.0")).toBe(false);
+    expect(satisfiesRange("0.5.0", "<1.0.0")).toBe(true);
+    expect(satisfiesRange("1.0.0", "<1.0.0")).toBe(false);
+  });
+  it("returns false on invalid version", () => {
+    expect(satisfiesRange("not-a-version", "^1.0.0")).toBe(false);
+  });
+});
 ```
 
-- [ ] **Step 2: If semver is not listed in dependencies, install it**
+- [ ] **Step 2: Run test to confirm failure**
 
 ```bash
-npm install semver@^7.6.0 @types/semver@^7.5.6 --save
+npm test -- tests/utils/version-extensions.test.ts
+```
+Expected: FAIL (functions not exported).
+
+- [ ] **Step 3: Extend `src/utils/version.ts`**
+
+Append to the existing `src/utils/version.ts`:
+
+```ts
+/**
+ * Extract the leading integer (major) from a version string. Returns null
+ * if the string does not start with a digit-only run.
+ */
+export function majorVersion(value: string): number | null {
+  if (!value) return null;
+  const m = value.match(/^(\d+)/);
+  if (!m) return null;
+  return Number(m[1]);
+}
+
+/**
+ * Coerce a partial or range-prefixed version into a concrete X.Y.Z form.
+ * Strips leading range operators (`^`, `~`, `>=`, `<=`, `>`, `<`, `=`), pads
+ * missing minor/patch with zeros. Returns null if the input cannot be
+ * interpreted as a version.
+ *
+ * Examples:
+ *   "1"        -> "1.0.0"
+ *   "1.2"      -> "1.2.0"
+ *   "^1.2.3"   -> "1.2.3"
+ *   ">=2.0"    -> "2.0.0"
+ *   "latest"   -> null
+ */
+export function coerceVersion(input: string): string | null {
+  if (!input) return null;
+  const stripped = input.trim().replace(/^[\^~]|^[<>]=?|^=/, "").trim();
+  const m = stripped.match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:[-+][^\s]+)?/);
+  if (!m) return null;
+  const [, major, minor = "0", patch = "0"] = m;
+  return `${major}.${minor}.${patch}`;
+}
+
+/**
+ * Does the string parse as a version range cve-lite recognises?
+ * Supports plain versions and the operators `^`, `~`, `>=`, `<=`, `>`, `<`, `=`.
+ * Does not support OR (`||`) or hyphen ranges (`1.0.0 - 2.0.0`) - if those
+ * surface in real projects, extend later.
+ */
+export function isValidRange(input: string): boolean {
+  if (!input) return false;
+  const trimmed = input.trim();
+  if (!/^(?:\^|~|>=|<=|>|<|=)?\s*\d+(?:\.\d+)?(?:\.\d+)?(?:[-+][^\s]+)?$/.test(trimmed)) {
+    return false;
+  }
+  return coerceVersion(trimmed) !== null;
+}
+
+/**
+ * Does `version` satisfy `range`? Minimal subset of semver semantics covering
+ * what the OA detectors need: exact, `^`, `~`, `>=`, `<=`, `>`, `<`, `=`.
+ *
+ * Pre-releases follow semver convention: a pre-release version (e.g.
+ * "1.2.3-beta") satisfies a range only if the range explicitly mentions a
+ * pre-release component at the same major.minor.patch boundary.
+ */
+export function satisfiesRange(version: string, range: string): boolean {
+  const v = coerceVersion(version);
+  if (!v) return false;
+  const trimmedRange = range.trim();
+
+  // Exact match (no operator)
+  if (/^\d/.test(trimmedRange)) {
+    return compareVersions(v, coerceVersion(trimmedRange) ?? "") === 0;
+  }
+
+  // `=` operator
+  if (trimmedRange.startsWith("=")) {
+    const target = coerceVersion(trimmedRange.slice(1));
+    return target !== null && compareVersions(v, target) === 0;
+  }
+
+  // `^` caret: same major, >= specified, < next major
+  if (trimmedRange.startsWith("^")) {
+    const target = coerceVersion(trimmedRange.slice(1));
+    if (!target) return false;
+    if (compareVersions(v, target) < 0) return false;
+    const tMajor = majorVersion(target);
+    const vMajor = majorVersion(v);
+    if (tMajor === null || vMajor === null) return false;
+    return vMajor === tMajor;
+  }
+
+  // `~` tilde: same major.minor, >= specified
+  if (trimmedRange.startsWith("~")) {
+    const target = coerceVersion(trimmedRange.slice(1));
+    if (!target) return false;
+    if (compareVersions(v, target) < 0) return false;
+    const [vMaj, vMin] = v.split(".").map(Number);
+    const [tMaj, tMin] = target.split(".").map(Number);
+    return vMaj === tMaj && vMin === tMin;
+  }
+
+  // Comparators
+  for (const op of [">=", "<=", ">", "<"] as const) {
+    if (trimmedRange.startsWith(op)) {
+      const target = coerceVersion(trimmedRange.slice(op.length));
+      if (!target) return false;
+      const cmp = compareVersions(v, target);
+      if (op === ">=") return cmp >= 0;
+      if (op === "<=") return cmp <= 0;
+      if (op === ">") return cmp > 0;
+      if (op === "<") return cmp < 0;
+    }
+  }
+
+  return false;
+}
 ```
 
-If already present, skip the install but note the version. Detectors assume `semver` >= 7.6.
-
-- [ ] **Step 3: Commit (only if install happened)**
+- [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-git add package.json package-lock.json
-git commit -m "feat(overrides): add semver dep for range work in OA002/OA004"
+npm test -- tests/utils/version-extensions.test.ts
+```
+Expected: PASS.
+
+- [ ] **Step 5: Run the full existing test suite**
+
+```bash
+npm test
+```
+Expected: no regressions in cve-lite's existing version.ts tests.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/utils/version.ts tests/utils/version-extensions.test.ts
+git commit -m "feat(version): add coerceVersion/satisfiesRange/isValidRange/majorVersion for override detectors"
 ```
 
 ---
@@ -567,11 +792,11 @@ Each task follows the **exact template from Task 5**:
 2. Rewrite imports and assertion shapes (Context -> OverrideContext, ruleId rebadge, remediation -> fix, severity adjustment).
 3. Run the test, confirm it fails.
 4. Copy the detector from `_preserved-override-audit/src/detectors/<X>.ts` to `src/overrides/detectors/<oaNNN>-<name>.ts`.
-5. Rewrite imports, rebadge ruleId, swap Finding -> OverrideFinding shape, update references URL to `OWASP/cve-lite-cli`, adjust runnableCommand to `cve-lite overrides ...`.
+5. Rewrite imports, rebadge ruleId, swap Finding -> OverrideFinding shape, update references URL to `OWASP/cve-lite-cli`, adjust runnableCommand to `cve-lite overrides ...`. **Replace any `import semver from 'semver'`** with named imports from `../../utils/version.js` per the mapping table in Task 1. The exact methods each detector uses (and their replacements) are listed below.
 6. Run the test, confirm it passes.
 7. Commit.
 
-The per-detector specifics - source filenames, severities, sub-rules - are listed below.
+The per-detector specifics - source filenames, severities, sub-rules, semver substitutions - are listed below.
 
 ### Task 6: OA002 floating-tag
 
@@ -584,6 +809,7 @@ The per-detector specifics - source filenames, severities, sub-rules - are liste
 **Severity:** medium (spec table).
 **Spec details:** flags string pins matching `/^(latest|next|tag-name)$/i` patterns. Uses `semver` to distinguish a concrete pin from a tag.
 **No special context fields needed beyond `overrideEntries`.**
+**Semver replacements:** `semver.validRange(s)` -> `isValidRange(s)`.
 
 Commit message: `feat(overrides): port OA002 floating-tag detector`.
 
@@ -609,8 +835,9 @@ Commit message: `feat(overrides): port OA003 wrong-section detector`.
 - New: `tests/overrides/detectors/oa004.test.ts`
 
 **Severity:** low (spec table).
-**Special:** uses `ctx.installedVersions` and `semver.gt()` to detect when the installed version surpasses the pinned override (override is obsolete).
+**Special:** uses `ctx.installedVersions` and version comparison to detect when the installed version surpasses the pinned override (override is obsolete).
 **Skip behavior:** detector returns `[]` when `ctx.skippedDetectors` contains `OA004`.
+**Semver replacements:** `semver.gt(a, b)` -> `compareVersions(a, b) > 0`; `semver.valid(v)` -> `looksLikeVersion(v)`; `semver.major(v)` -> `majorVersion(v)`.
 
 Commit message: `feat(overrides): port OA004 surpassed-pin detector`.
 
@@ -624,6 +851,7 @@ Commit message: `feat(overrides): port OA004 surpassed-pin detector`.
 
 **Severity:** medium (per top-level rule); sub-rules may carry their own internal weighting. Keep the preserved sub-rule sub-codes (`OA005.a`-`OA005.e`) and surface them via `subRuleId`.
 **Important:** OA005 fires both per outer key and per inner key. Preserved scanner.ts dedups OA005 vs OA001 (OA005 wins). That dedup logic moves into the runner (Plan 3), not this detector - keep the detector pure.
+**Semver replacements:** `semver.satisfies(v, r)` -> `satisfiesRange(v, r)`; `semver.validRange(r)` -> `isValidRange(r)`.
 
 Commit message: `feat(overrides): port OA005 nested-ineffective detector`.
 
@@ -637,6 +865,7 @@ Commit message: `feat(overrides): port OA005 nested-ineffective detector`.
 
 **Severity:** medium (per spec). Composite severity escalation (`medium -> high` when OA008 also fires for the same target) is runner logic, deferred to Plan 3.
 **Special:** consumes `ctx.parentDeclarations`. Pre-skipped when `node_modules` is missing.
+**Semver replacements:** `semver.rcompare(a, b)` -> `compareVersions(b, a)` (args swapped); `semver.valid(v)` -> `looksLikeVersion(v)`.
 
 Commit message: `feat(overrides): port OA006 coupled-platform-binary detector`.
 
@@ -650,6 +879,7 @@ Commit message: `feat(overrides): port OA006 coupled-platform-binary detector`.
 
 **Severity:** low (spec table; opt-in network).
 **Special:** consumes `ctx.registryDistTags`. The detector itself is offline-safe: it only fires when the map is non-empty. The actual registry calls happen in the context builder when `checkNetwork: true`. The `buildOverrideContext` task (Task 4) leaves `registryDistTags` empty by default; a follow-up in Plan 3 wires up the actual fetch when `audit()` is called with `checkNetwork: true`.
+**Semver replacements:** `semver.gt(a, b)` -> `compareVersions(a, b) > 0`; `semver.valid(v)` -> `looksLikeVersion(v)`.
 
 Commit message: `feat(overrides): port OA007 frozen-latest detector`.
 
@@ -663,6 +893,7 @@ Commit message: `feat(overrides): port OA007 frozen-latest detector`.
 
 **Severity:** **critical** (spec - fix did not take).
 **Special:** consumes `ctx.installedCopies`. Walks the on-disk tree to find any copy of the target whose `version` does not satisfy the override pin. Pre-skipped when `node_modules` missing.
+**Semver replacements:** `semver.satisfies(v, r)` -> `satisfiesRange(v, r)`; `semver.coerce(s)` -> `coerceVersion(s)`; `semver.lt(a, b)` -> `compareVersions(a, b) < 0`; `semver.valid(v)` -> `looksLikeVersion(v)`; `semver.validRange(r)` -> `isValidRange(r)`.
 
 Commit message: `feat(overrides): port OA008 materialized detector`.
 
@@ -803,7 +1034,7 @@ Plan 2 complete when all 8 detectors port cleanly, all tests pass, the registry 
 | Runnable fix commands use `cve-lite overrides` | Tasks 5-12 |
 | Registry (`ALL_DETECTORS`, `VERIFY_DETECTORS`) ready for API consumption | Task 13 |
 | Validation gate: parser API mismatches caught and resolved per detector | Task 4 (build), Task 14 (smoke test) |
-| `semver` runtime dep available | Task 1 |
+| Version-range operations available without runtime deps | Task 1 (extends `src/utils/version.ts`) |
 
 ## Next plan
 

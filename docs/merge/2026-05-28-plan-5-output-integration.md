@@ -559,6 +559,8 @@ git commit -m "feat(output): HTML report Overrides section"
 **Files:**
 - Modify: `src/index.ts`
 
+**Note on the existing debug logger.** cve-lite v1.18.2 introduced `src/output/debug.ts` with `createDebugLogger(enabled)` returning a `DebugSession` (unstructured human-readable file appender, gated by `--debug`). Our `audit-log` module is a separate concern: structured NDJSON, gated by `--audit-log`, intended for machine consumption and change-control evidence. They coexist independently. Do not merge them or route one through the other. A run with both flags writes two files; that is expected.
+
 - [ ] **Step 1: Read the current scan flow in `src/index.ts`**
 
 ```bash
@@ -842,4 +844,4 @@ Plan 5 complete when:
 
 ## Next plan
 
-Plan 6 (`docs/merge/2026-05-28-plan-6-cleanup-e2e.md`) deletes `_preserved-override-audit/`, dogfoods cve-lite against `hexmetrics`, and produces the dev-to-test handoff artifact for Phase 2.
+Plan 6 (`docs/merge/2026-05-28-plan-6-cleanup-e2e.md`) deletes `_preserved-override-audit/`, dogfoods cve-lite against the Analog/Ghost/Prisma examples plus `hexmetrics`, and produces the dev-to-test handoff artifact for Phase 2.

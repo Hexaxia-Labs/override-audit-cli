@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Migrate the remaining preserved artifacts (test fixtures, rule docs), delete `_preserved-override-audit/`, dogfood the merged CLI against `hexmetrics`, and produce the artifact set Phase 2 needs: a clean diff against `cve-lite-cli@main`, a release-note draft for the cve-lite major bump, and a sign-off checklist.
+**Goal:** Migrate the remaining preserved artifacts (test fixtures, rule docs), delete `_preserved-override-audit/`, dogfood the merged CLI against cve-lite's own example projects (Analog/Ghost/Prisma, which Sonu validated on 2026-06-01) plus `hexmetrics`, and produce the artifact set Phase 2 needs: a clean diff against `cve-lite-cli@main`, a release-note draft for the cve-lite major bump, and a sign-off checklist.
 
 **Architecture:** This plan is mostly file-move and validation, not new code. The substantive change: rule docs (`OA001.md`...`OA008.md`) move to cve-lite's `src/docs/` (or wherever cve-lite serves docs from), URLs in detector source align with the new docs locations, fixtures move to `tests/overrides/fixtures/`. The dogfood validation runs the merged CLI against two real npm projects and confirms reasonable output.
 
@@ -248,42 +248,61 @@ git commit -m "chore(merge): delete _preserved-override-audit/; migration comple
 
 ---
 
-## Task 7: Dogfood against `hexmetrics` (npm)
+## Task 7: Dogfood against cve-lite example projects
 
 **Files:** none (read-only validation)
 
-- [ ] **Step 1: Locate hexmetrics**
+Sonu validated the OA detectors against three of cve-lite's own example projects on 2026-06-01 with the following hits:
 
-Per the user-memory pointer, hexmetrics lives at `~/Projects/hexmetrics/` (npm-based, canonical dogfood target).
+- **`examples/analog`**: OA006 fired - the `vite` override is fighting `@angular/build`'s exact pin; the vulnerable copy is likely still on disk. This is exactly the closed-loop verification gap cve-lite has today.
+- **`examples/ghost`**: 2 orphaned nested Cheerio overrides silently doing nothing (OA001 or OA005).
+- **`examples/prisma`**: 1 orphaned override (OA001).
 
-```bash
-ls ~/Projects/hexmetrics/package.json
-```
+These are known-positive fixtures. Re-run them now that the merge code is wired end-to-end and confirm the same findings reproduce. Then run `hexmetrics` for an npm-side project neither Sonu nor Aaron's team contributed examples for.
 
-- [ ] **Step 2: Run the full audit**
+- [ ] **Step 1: Re-run Sonu's validation cases**
 
 ```bash
 npm run build
-node dist/index.js overrides ~/Projects/hexmetrics --json > /tmp/hexmetrics-overrides.json
-node dist/index.js ~/Projects/hexmetrics --check-overrides --audit-log /tmp/hexmetrics-audit.ndjson
+node dist/index.js overrides examples/analog --json > /tmp/analog-overrides.json
+node dist/index.js overrides examples/ghost --json > /tmp/ghost-overrides.json
+node dist/index.js overrides examples/prisma --json > /tmp/prisma-overrides.json
 ```
 
-- [ ] **Step 3: Inspect output**
+- [ ] **Step 2: Confirm Sonu's findings reproduce**
 
 ```bash
-jq '.findings | length, .findings[0]' /tmp/hexmetrics-overrides.json
-head /tmp/hexmetrics-audit.ndjson
+jq '[.findings[] | .ruleId] | group_by(.) | map({rule: .[0], count: length})' /tmp/analog-overrides.json
+jq '[.findings[] | .ruleId] | group_by(.) | map({rule: .[0], count: length})' /tmp/ghost-overrides.json
+jq '[.findings[] | .ruleId] | group_by(.) | map({rule: .[0], count: length})' /tmp/prisma-overrides.json
+```
+
+Expected:
+- Analog: OA006 fires at least once (the vite vs @angular/build coupling).
+- Ghost: at least 2 OA001 or OA005 findings on Cheerio entries.
+- Prisma: at least 1 OA001 finding.
+
+If any of these regressed (Sonu's finding does NOT reproduce), that is a P1 bug. Investigate before continuing.
+
+- [ ] **Step 3: Additionally run hexmetrics for npm-side coverage**
+
+Per the user-memory pointer, hexmetrics lives at `~/Projects/hexmetrics/`.
+
+```bash
+ls ~/Projects/hexmetrics/package.json
+node dist/index.js overrides ~/Projects/hexmetrics --json > /tmp/hexmetrics-overrides.json
+node dist/index.js ~/Projects/hexmetrics --check-overrides --audit-log /tmp/hexmetrics-audit.ndjson
 ```
 
 - [ ] **Step 4: Record observations**
 
 In your working notes (not a commit yet):
-- What rules fired?
-- Were any findings surprising / false-positive looking?
+- What rules fired across the four projects?
+- Were any findings surprising or false-positive-looking?
 - Did the audit log capture `scan.started`, `cve.detected`, `oa.detected`, `scan.finished` cleanly?
-- Did `--fix` (if you ran it on a throwaway copy) apply patches as expected and verify clean?
+- Did `--fix` (run on throwaway copies) apply patches as expected and verify clean?
 
-(File any findings as issues on `Hexaxia-Labs/override-audit-cli` - they are real bugs the spec did not anticipate.)
+(File any surprises as issues on `Hexaxia-Labs/override-audit-cli` or directly on the cve-lite-cli branch.)
 
 ---
 
@@ -326,8 +345,11 @@ Aaron and Sonu both confirm before pushing this branch's content to a
 
 ## Dogfood
 
+- [ ] `cve-lite overrides examples/analog` reproduces Sonu's OA006 finding.
+- [ ] `cve-lite overrides examples/ghost` reproduces Sonu's 2 nested-Cheerio findings.
+- [ ] `cve-lite overrides examples/prisma` reproduces Sonu's OA001 finding.
 - [ ] `cve-lite overrides ~/Projects/hexmetrics` produces reasonable output.
-- [ ] No P1 surprises.
+- [ ] No P1 surprises across the four projects.
 
 ## Docs
 
@@ -445,7 +467,7 @@ Plan 6 complete when the checklist is fully signed.
 | Rule docs migrated (OA001..OA008) | Task 3 |
 | Audit-log reference doc migrated | Task 4 |
 | Architecture / usage merged into cve-lite docs | Task 5 |
-| Dogfood validation against hexmetrics | Task 7 |
+| Dogfood validation against cve-lite examples (Analog/Ghost/Prisma) + hexmetrics | Task 7 |
 | Phase 1 exit criteria satisfied | Tasks 10, 8 |
 | Handoff artifact for Phase 2 | Tasks 8, 9 |
 

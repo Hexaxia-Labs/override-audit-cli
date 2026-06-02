@@ -110,6 +110,7 @@ In `src/cli/args.ts`, after the `install-skill` branch and before the positional
       if (arg.startsWith("--rule=")) { options.rule = arg.slice("--rule=".length); continue; }
       if (arg === "--fail-on") { options.failOn = argv[++i] ?? options.failOn; continue; }
       if (arg.startsWith("--fail-on=")) { options.failOn = arg.slice("--fail-on=".length); continue; }
+      if (arg === "--debug") { options.debug = true; continue; }
       if (arg.startsWith("-")) throw new Error(`Unknown option: ${arg}`);
       if (!projectArg) { projectArg = arg; continue; }
       throw new Error(`Unexpected argument: ${arg}`);
@@ -120,7 +121,7 @@ In `src/cli/args.ts`, after the `install-skill` branch and before the positional
 
 - [ ] **Step 2: Add the new flags to the positional scan branch**
 
-In the positional scan loop (around line 40 of args.ts), add:
+In the positional scan loop of args.ts (near the existing `--fix` branch around line 120 as of cve-lite v1.18.2), add:
 ```ts
       if (arg === "--audit-log") { options.auditLog = argv[++i]; continue; }
       if (arg.startsWith("--audit-log=")) { options.auditLog = arg.slice("--audit-log=".length); continue; }
@@ -633,7 +634,7 @@ Expected: PASS (2 tests).
 
 - [ ] **Step 5: Wire the hook into `src/index.ts` on the scan path**
 
-Find the section of `src/index.ts` that handles `options.fix` for the scan command. cve-lite's existing CVE-fix pipeline runs the package manager (`npm install` / `pnpm add` / `yarn add`) and produces some structure naming the packages it upgraded - in cve-lite today this is the `SuggestedFixTarget[]` returned by `buildSuggestedFixCommandPlan()` (or the equivalent post-execution result).
+Find the section of `src/index.ts` that handles `options.fix` for the scan command. As of cve-lite v1.18.2, the `--fix` lifecycle is owned by `src/utils/fix-runner.ts` (a dedicated module added in PR #516). The runner shells the package manager (`npm install` / `pnpm add` / `yarn add`) and produces a result naming the packages it upgraded - the `SuggestedFixTarget[]` shape from `src/remediation/fix-commands.ts` (`buildSuggestedFixCommandPlan()`). Hook our verify pass at the call site that consumes the fix-runner's result, **after** the package manager has run and `src/index.ts` has obtained the post-fix scan output. Do not modify `src/utils/fix-runner.ts` itself; sit alongside it in the orchestration layer.
 
 Collect those as `cveFixTargets` and pass them to the hook. **After** cve-lite's existing CVE-fix-and-rescan path completes:
 
