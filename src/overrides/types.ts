@@ -20,3 +20,32 @@ export type OverrideSubRuleId =
   | "OA005.e"   // suspect
 
   ;
+
+import type { SeverityLabel } from "../types.js";
+
+export type RFC6902Op =
+  | { op: "add"; path: string; value: unknown }
+  | { op: "remove"; path: string }
+  | { op: "replace"; path: string; value: unknown }
+  | { op: "move"; from: string; path: string }
+  | { op: "copy"; from: string; path: string }
+  | { op: "test"; path: string; value: unknown };
+
+export interface OverrideFix {
+  type: "rfc6902";
+  patch: RFC6902Op[];
+  /** Optional runnable command equivalent (e.g., `cve-lite overrides --fix ...`). */
+  runnableCommand?: string;
+}
+
+export interface OverrideFinding {
+  ruleId: import("./types.js").OverrideRuleId;
+  subRuleId?: import("./types.js").OverrideSubRuleId;
+  severity: SeverityLabel;
+  package: { name: string; version?: string };
+  location: { file: string; jsonPath?: string; line?: number };
+  message: string;
+  details?: string;
+  fix?: OverrideFix;
+  references?: string[];
+}
