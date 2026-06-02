@@ -33,6 +33,12 @@ export function readPackageJson(projectPath: string): PackageJsonReadResult {
 /**
  * Strip pnpm's optional `@<specifier>` suffix from an override key.
  * Handles both `pkg@>=1.0.0` and `@scope/pkg@>=1.0.0`.
+ *
+ * For pnpm "nested" override keys (`parent>child[@spec]`) we deliberately
+ * do NOT split on `>`. The composite literal stays as the bare name so that
+ * OA001 can lockfile-test it. This matches preserved override-audit's
+ * behavior; the semantic question "is the override scope alive inside the
+ * parent" needs a dep-graph walk that lives in a future detector.
  */
 export function bareName(overrideKey: string): string {
   if (overrideKey.startsWith('@')) {

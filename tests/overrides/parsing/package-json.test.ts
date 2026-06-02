@@ -1,4 +1,4 @@
-import { readPackageJson, extractOverrideEntries, MalformedPackageJsonError } from '../../../src/overrides/parsing/package-json.js';
+import { readPackageJson, extractOverrideEntries, bareName, MalformedPackageJsonError } from '../../../src/overrides/parsing/package-json.js';
 import { join } from 'path';
 
 const F = (name: string) => join(process.cwd(), 'tests', 'fixtures', name);
@@ -66,5 +66,38 @@ describe('extractOverrideEntries', () => {
   it('returns empty array when no overrides', () => {
     const r = readPackageJson(F('manifest-no-overrides'));
     expect(extractOverrideEntries(r.parsed)).toEqual([]);
+  });
+});
+
+describe('bareName', () => {
+  it('returns the name unchanged for a plain key', () => {
+    expect(bareName('postcss')).toBe('postcss');
+  });
+
+  it('strips the @>=spec suffix from a plain key', () => {
+    expect(bareName('react@>=18')).toBe('react');
+  });
+
+  it('preserves a scoped name', () => {
+    expect(bareName('@scope/pkg')).toBe('@scope/pkg');
+  });
+
+  it('strips the @spec suffix from a scoped name', () => {
+    expect(bareName('@scope/pkg@>=1.0.0')).toBe('@scope/pkg');
+  });
+
+  it('leaves pnpm nested syntax parent>child as a literal composite name', () => {
+    // Deliberate: the composite stays so OA001 can lockfile-test the whole key.
+    // Whether the override is semantically orphaned within the parent's
+    // dep-graph is a separate concern (Plan 6 follow-up detector).
+    expect(bareName('ember-svg-jar>cheerio')).toBe('ember-svg-jar>cheerio');
+    expect(bareName('juice>cheerio')).toBe('juice>cheerio');
+  });
+
+  it('strips the @spec from pnpm nested syntax with a scoped child', () => {
+    // Known-quirky: the @ is the scope-marker for the inner child, but bareName
+    // currently treats it as the spec delimiter (matches preserved behavior).
+    expect(bareName('eslint-plugin-ghost>@typescript-eslint/eslint-plugin'))
+      .toBe('eslint-plugin-ghost>');
   });
 });
