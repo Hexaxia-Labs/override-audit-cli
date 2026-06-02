@@ -753,6 +753,54 @@ snapshots:
     }
   });
 
+  it("resolves transitive paths through pnpm v9 aliased dependencies", () => {
+    // Reproduces the formisch/vm2 bug: a deep transitive package gets paths: []
+    // when an intermediate node uses a pnpm alias (depName differs from real package name).
+    // lockfile entry: '@remix-run/dev': '@vercel/remix-run-dev@1.16.1' — the value is not a
+    // bare version string, so normalizePnpmDepRefV9 must handle it via lastIndexOf('@').
+    const projectDir = createTempProjectDir();
+    const lockPath = path.join(projectDir, "pnpm-lock.yaml");
+
+    fs.writeFileSync(
+      lockPath,
+      `
+lockfileVersion: '9.0'
+importers:
+  .:
+    dependencies:
+      vercel:
+        specifier: ^32.0.0
+        version: 32.0.0
+snapshots:
+  vercel@32.0.0:
+    dependencies:
+      '@vercel/remix-builder': 2.0.0
+  '@vercel/remix-builder@2.0.0':
+    dependencies:
+      '@remix-run/dev': '@vercel/remix-run-dev@1.16.1'
+  '@vercel/remix-run-dev@1.16.1':
+    dependencies:
+      vm2: 3.9.19
+  vm2@3.9.19: {}
+`,
+      "utf8",
+    );
+
+    try {
+      const packages = loadFromPnpmLock(lockPath, false);
+      const vm2 = packages.find(p => p.name === "vm2" && p.version === "3.9.19");
+
+      expect(vm2).toBeDefined();
+      expect(vm2?.paths).toEqual(
+        expect.arrayContaining([
+          ["project", "vercel", "@vercel/remix-builder", "@vercel/remix-run-dev", "vm2"],
+        ]),
+      );
+    } finally {
+      removeDir(projectDir);
+    }
+  });
+
   it("preserves multiple v9 paths to the same package version", () => {
     const projectDir = createTempProjectDir();
     const lockPath = path.join(projectDir, "pnpm-lock.yaml");

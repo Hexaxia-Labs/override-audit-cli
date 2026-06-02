@@ -50,6 +50,14 @@ export function serverAdvisoryRequestHint(): string[] {
   ];
 }
 
+export function offlineDbSyncHint(offlineDb?: string): string[] {
+  const lines = ["To build it, run: cve-lite advisories sync"];
+  if (offlineDb) {
+    lines.push(`Or to save it to the requested path: cve-lite advisories sync --output ${offlineDb}`);
+  }
+  return lines;
+}
+
 const SSL_ERROR_CODES = new Set([
   "SELF_SIGNED_CERT_IN_CHAIN",
   "CERT_UNTRUSTED",

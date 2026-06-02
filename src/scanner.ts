@@ -10,13 +10,19 @@ import { LocalAdvisorySource } from "./advisory/local-advisory-source.js";
 import { AdvisoryDbMetadata, LocalAdvisoryDatabase } from "./advisory/local-db.js";
 import { ADVISORY_DB_STALE_AFTER_MS, getDefaultAdvisoryDbPath } from "./advisory/osv-sync.js";
 import { resolveRecommendedParentUpgrade } from "./remediation/parent-upgrade.js";
-import { resolveLowestKnownNonVulnerableVersion, resolvePublishedFixVersion } from "./remediation/npm-registry.js";
+import {
+  configureNpmRegistryDebug,
+  resolveLowestKnownNonVulnerableVersion,
+  resolvePublishedFixVersion,
+} from "./remediation/npm-registry.js";
+import { countBySeverity } from "./utils/severity.js";
 import { resolveNpmTransitiveRemediation, resolveTransitiveRemediationViaRegistry } from "./remediation/npm-transitive-resolution.js";
 import { loadNpmLockGraph } from "./parsers/npm-lock-graph.js";
 import { buildPnpmWorkspaceMap } from "./parsers/pnpm-lock.js";
 import { buildNpmWorkspaceMap } from "./parsers/package-lock.js";
 import { buildBunWorkspaceMap } from "./parsers/bun-lock.js";
 import { pluralize } from "./utils/string.js";
+import { type DebugLogger } from "./output/debug.js";
 
 type ScanClassificationContext = {
   directDependencyNames?: ReadonlySet<string> | null;
@@ -37,6 +43,7 @@ export function createAdvisorySource(options?: {
   osvUrl?: string;
   offline?: boolean;
   offlineDb?: string;
+  debugLog?: DebugLogger;
 }): AdvisorySourceContext {
   const offline = !!options?.offline || !!options?.offlineDb;
 
@@ -54,7 +61,7 @@ export function createAdvisorySource(options?: {
   }
 
   return {
-    advisorySource: new OsvAdvisorySource(options?.osvUrl),
+    advisorySource: new OsvAdvisorySource(options?.osvUrl, options?.debugLog),
     offline: false,
     sourceLabel: options?.osvUrl
       ? `custom OSV endpoint (${options.osvUrl})`
@@ -74,11 +81,14 @@ export async function scanPackages(
   batchSize: number,
   options: ParsedOptions,
   context?: ScanClassificationContext,
+  debugLog?: DebugLogger,
 ): Promise<Finding[]> {
+  const log: DebugLogger = debugLog ?? (() => {});
   const sourceContext = createAdvisorySource({
     osvUrl: options.osvUrl,
     offline: options.offline,
     offlineDb: options.offlineDb,
+    debugLog: log,
   });
   const offline = sourceContext.offline;
   const cacheDirOverride = options.cacheDir;
@@ -90,7 +100,10 @@ export async function scanPackages(
     options,
   );
   const advisorySource = sourceContext.advisorySource;
-  const cache = loadCache(cacheDirOverride);
+  if (!offline && options.debug) {
+    configureNpmRegistryDebug(log);
+  }
+  const cache = loadCache(cacheDirOverride, options.debug ? log : undefined);
 
   try {
     const results: Array<{ pkg: PackageRef; vulnIds: string[] }> = [];
@@ -98,11 +111,14 @@ export async function scanPackages(
 
     if (!offline) {
       const nowMs = Date.now();
+      let hits = 0;
+      let misses = 0;
       for (const pkg of packages) {
         const cacheKey = getPackageCacheKey(pkg);
         if (!options.noCache) {
           const cached = cache.queryEntries[cacheKey];
           if (cached && !isEntryStale(cached, nowMs)) {
+            hits += 1;
             if (cached.vulnIds.length > 0) {
               results.push({ pkg, vulnIds: cached.vulnIds });
             }
@@ -110,15 +126,25 @@ export async function scanPackages(
           }
         }
 
+        misses += 1;
         uncachedPackages.push(pkg);
       }
 
       const chunks = chunk(uncachedPackages, batchSize);
+      const reason = options.noCache ? "no-cache mode" : "stale or missing entry";
+      log("Cache check", { hits, misses, reason, uncachedBatches: chunks.length });
       spinner.update(`Scanning OSV in ${chunks.length} parallel ${pluralize(chunks.length, "batch", "batches")}...`);
+
+      const osvScanStartedAt = Date.now();
+      let batchCounter = 0;
       const allAdvisoryResults = await runWithConcurrency(
         chunks,
         5,
-        c => advisorySource.queryBatch(c),
+        c => {
+          batchCounter += 1;
+          const batchId = `b-${String(batchCounter).padStart(2, "0")}`;
+          return advisorySource.queryBatch(c, { batchId });
+        },
       );
 
       for (let i = 0; i < chunks.length; i++) {
@@ -136,13 +162,21 @@ export async function scanPackages(
         }
       }
 
+      if (chunks.length > 0) {
+        log("OSV scan complete", {
+          totalBatches: chunks.length,
+          totalDurationMs: Date.now() - osvScanStartedAt,
+          packagesWithVulns: results.length,
+        });
+      }
+
       if (chunks.length === 0) {
         spinner.succeed("Loaded package matches from cache");
       } else {
         spinner.succeed(`Queried OSV in ${chunks.length} ${pluralize(chunks.length, "batch", "batches")}`);
       }
     } else {
-      const advisoryResult = await advisorySource.queryBatch(packages);
+      const advisoryResult = await advisorySource.queryBatch(packages, { batchId: "offline" });
       const rows = advisoryResult ?? [];
       for (let i = 0; i < packages.length; i++) {
         const pkg = packages[i];
@@ -208,7 +242,7 @@ export async function scanPackages(
     }
 
     if (!offline && idSet.size > 0) {
-      saveCache(cache, cacheDirOverride);
+      saveCache(cache, cacheDirOverride, options.debug ? log : undefined);
     }
 
     const findings: Finding[] = results.map(result => {
@@ -246,26 +280,56 @@ export async function scanPackages(
     });
 
     const npmTransitiveGraph = context?.scanSource === "package-lock" && context.scanFilePath
-      ? createNpmTransitiveGraphFromLockfile(context.scanFilePath)
+      ? createNpmTransitiveGraphFromLockfile(context.scanFilePath, log, packages.length)
       : null;
     const npmWorkspaceMap = (() => {
       try {
         return context?.scanSource === "package-lock" && context.scanFilePath
           ? buildNpmWorkspaceMap(context.scanFilePath) : null;
-      } catch { return null; }
+      } catch (error) {
+        log("Workspace map", {
+          type: "npm",
+          status: "failed",
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      }
     })();
+    if (npmWorkspaceMap) {
+      log("Workspace map", { type: "npm", workspaces: npmWorkspaceMap.size });
+    }
     const pnpmWorkspaceMap = (() => {
       try {
         return context?.scanSource === "pnpm-lock" && context.scanFilePath
           ? buildPnpmWorkspaceMap(context.scanFilePath) : null;
-      } catch { return null; }
+      } catch (error) {
+        log("Workspace map", {
+          type: "pnpm",
+          status: "failed",
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      }
     })();
+    if (pnpmWorkspaceMap) {
+      log("Workspace map", { type: "pnpm", workspaces: pnpmWorkspaceMap.size });
+    }
     const bunWorkspaceMap = (() => {
       try {
         return context?.scanSource === "bun-lock" && context.scanFilePath
           ? buildBunWorkspaceMap(context.scanFilePath) : null;
-      } catch { return null; }
+      } catch (error) {
+        log("Workspace map", {
+          type: "bun",
+          status: "failed",
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      }
     })();
+    if (bunWorkspaceMap) {
+      log("Workspace map", { type: "bun", workspaces: bunWorkspaceMap.size });
+    }
     const lockfileWorkspaceMap = pnpmWorkspaceMap ?? bunWorkspaceMap ?? null;
     const npmRemediationCache = new Map<string, Finding["recommendedNpmTransitiveRemediation"]>();
     const parentUpgradeCache = new Map<string, Finding["recommendedParentUpgrade"]>();
@@ -288,7 +352,7 @@ export async function scanPackages(
         if (!offline) {
           await validateDirectFixTargets(findings, (finding) => {
             updateAnalysisProgress("validating fix target for", `${finding.pkg.name}@${finding.pkg.version}`);
-          });
+          }, log);
         }
 
         for (const finding of findings) {
@@ -389,8 +453,20 @@ export async function scanPackages(
         throw error;
       }
     } else if (!offline) {
-      await validateDirectFixTargets(findings);
+      await validateDirectFixTargets(findings, undefined, log);
     }
+
+    const severityCounts = countBySeverity(findings);
+    log("Findings classified", {
+      total: findings.length,
+      direct: findings.filter(finding => finding.relationship === "direct").length,
+      transitive: findings.filter(finding => finding.relationship === "transitive").length,
+      critical: severityCounts.critical,
+      high: severityCounts.high,
+      medium: severityCounts.medium,
+      low: severityCounts.low,
+      unknown: severityCounts.unknown,
+    });
 
     return findings;
   } catch (error) {
@@ -401,9 +477,14 @@ export async function scanPackages(
   }
 }
 
-function createNpmTransitiveGraphFromLockfile(filePath: string): NpmTransitiveGraph | null {
+function createNpmTransitiveGraphFromLockfile(
+  filePath: string,
+  log: DebugLogger,
+  packageCount: number,
+): NpmTransitiveGraph | null {
   try {
     const lockGraph = loadNpmLockGraph(filePath, { includePaths: false });
+    log("npm transitive graph", { status: "built", nodes: packageCount });
     return {
       nodeIdsFor(name: string, version: string | null) {
         return lockGraph.nodeIdsFor(name, version);
@@ -421,7 +502,11 @@ function createNpmTransitiveGraphFromLockfile(filePath: string): NpmTransitiveGr
         return lockGraph.rangeFor(parentNodeId, childName);
       },
     };
-  } catch {
+  } catch (error) {
+    log("npm transitive graph", {
+      status: "failed",
+      error: error instanceof Error ? error.message : String(error),
+    });
     return null;
   }
 }
@@ -429,11 +514,20 @@ function createNpmTransitiveGraphFromLockfile(filePath: string): NpmTransitiveGr
 async function validateDirectFixTargets(
   findings: Finding[],
   onFinding?: (finding: Finding) => void,
+  debugLog?: DebugLogger,
 ): Promise<void> {
   const directCandidates = findings.filter(finding => finding.vulnerabilities.length > 0);
 
   for (const finding of directCandidates) {
     onFinding?.(finding);
+    const logFixValidation = () => {
+      debugLog?.("Fix validation", {
+        package: finding.pkg.name,
+        installed: finding.pkg.version,
+        resolvedFixVersion: finding.validatedFirstFixedVersion,
+        verified: Boolean(finding.validatedFirstFixedVersion),
+      });
+    };
     const lowestKnownResolution = await resolveLowestKnownNonVulnerableVersion(
       finding.pkg.name,
       finding.pkg.version,
@@ -448,6 +542,7 @@ async function validateDirectFixTargets(
 
       if (!fixedVersionHint || fixedVersionHint === lowestKnownResolution.resolvedVersion) {
         finding.fixVersionValidationNote = null;
+        logFixValidation();
         continue;
       }
 
@@ -457,11 +552,13 @@ async function validateDirectFixTargets(
         hintResolution.note
       ) {
         finding.fixVersionValidationNote = hintResolution.note;
+        logFixValidation();
         continue;
       }
 
       finding.fixVersionValidationNote =
         `Advisory fixed-version hint ${fixedVersionHint} is still known vulnerable for ${finding.pkg.name}; scanned ${lowestKnownResolution.candidatesChecked} package ${pluralize(lowestKnownResolution.candidatesChecked, "version")} above current version (${lowestKnownResolution.candidatesKnownVulnerable} still known vulnerable); using lowest known non-vulnerable version ${lowestKnownResolution.resolvedVersion}.`;
+      logFixValidation();
       continue;
     }
 
@@ -470,6 +567,7 @@ async function validateDirectFixTargets(
       finding.fixVersionValidationNote = lowestKnownResolution.note;
       finding.validatedTargetScannedVersions = null;
       finding.validatedTargetKnownVulnerableVersions = null;
+      logFixValidation();
       continue;
     }
 
@@ -478,6 +576,7 @@ async function validateDirectFixTargets(
     finding.fixVersionValidationNote = resolution.note ?? lowestKnownResolution.note;
     finding.validatedTargetScannedVersions = null;
     finding.validatedTargetKnownVulnerableVersions = null;
+    logFixValidation();
   }
 }
 

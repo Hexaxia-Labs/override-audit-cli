@@ -109,6 +109,10 @@ export function parseArgs(argv: string[]): {
       options.json = true;
       continue;
     }
+    if (arg === "--debug") {
+      options.debug = true;
+      continue;
+    }
     if (arg === "--verbose") {
       options.verbose = true;
       continue;

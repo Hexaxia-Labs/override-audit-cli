@@ -47,6 +47,7 @@ export function printHelp(): void {
     "  --fix                     Apply validated direct dependency fixes and rescan",
     "  --osv-url <url>           Use a custom OSV-compatible advisory endpoint",
     "  --ca-cert <path>          Path to a CA certificate file for corporate SSL proxies",
+    "  --debug                   Write verbose runtime/network diagnostics to a timestamped log file",
     "  --verbose                 Show detailed output with fix plan, paths, and full table",
     "  --prod-only               Exclude dev dependencies where available",
     "  --fail-on <severity>      Exit non-zero at or above severity (default: critical)",

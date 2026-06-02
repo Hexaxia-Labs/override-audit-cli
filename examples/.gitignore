@@ -1,4 +1,5 @@
 node_modules/
+.yarn/
 
 # Full project clones — too large for in-repo fixtures.
 # Clone these separately for local testing (see readme).

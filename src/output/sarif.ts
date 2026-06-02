@@ -2,7 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Finding, ScanSource } from "../types.js";
 import type { SuggestedFixCommandPlan } from "../remediation/fix-commands.js";
-import { findSuggestedCommandForFinding } from "../remediation/fix-commands.js";
 import { getRecommendedAction } from "./formatters.js";
 import { getCliVersion } from "../utils/version-info.js";
 import { severityToSarifLevel } from "../utils/severity.js";
@@ -41,7 +40,6 @@ type SarifResult = {
   level: "error" | "warning" | "note";
   message: { text: string };
   locations: SarifLocation[];
-  fixes?: SarifFix[];
 };
 
 type SarifLocation = {
@@ -49,13 +47,6 @@ type SarifLocation = {
     artifactLocation: { uri: string; uriBaseId: string };
     region: { startLine: number };
   };
-};
-
-type SarifArtifactChange = Record<string, never>;
-
-type SarifFix = {
-  description: { text: string };
-  artifactChanges: SarifArtifactChange[];
 };
 
 type SarifArtifact = {
@@ -83,7 +74,7 @@ export function buildSarifOutput(
   findings: Finding[],
   lockfileUri: string,
   version: string,
-  plan: SuggestedFixCommandPlan | null,
+  _plan: SuggestedFixCommandPlan | null,
 ): SarifLog {
   const ruleMap = new Map<string, SarifRule>();
   const results: SarifResult[] = [];
@@ -91,7 +82,6 @@ export function buildSarifOutput(
   for (const finding of findings) {
     const level = severityToSarifLevel(finding.severity);
     const action = getRecommendedAction(finding);
-    const runnableFixCommand = plan ? findSuggestedCommandForFinding(plan, finding) : null;
 
     const location: SarifLocation = {
       physicalLocation: {
@@ -117,20 +107,14 @@ export function buildSarifOutput(
         });
       }
 
-      const result: SarifResult = {
+      results.push({
         ruleId,
         level,
         message: {
           text: `${finding.pkg.name}@${finding.pkg.version} is vulnerable (${finding.severity}). ${action}`,
         },
         locations: [location],
-      };
-
-      if (runnableFixCommand) {
-        result.fixes = [{ description: { text: runnableFixCommand }, artifactChanges: [] }];
-      }
-
-      results.push(result);
+      });
     }
   }
 

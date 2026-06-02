@@ -1,5 +1,6 @@
 import { compareVersions, isPreReleaseVersion, looksLikeVersion } from "../utils/version.js";
 import type { OsvVuln } from "../types.js";
+import type { DebugLogger } from "../output/debug.js";
 
 export type Packument = {
   versions?: Record<string, {
@@ -20,6 +21,19 @@ export type PublishedFixVersionResolution = {
 const packumentCache = new Map<string, Packument | null>();
 const DEFAULT_NPM_REGISTRY_URL = "https://registry.npmjs.org";
 
+let registryDebugLog: DebugLogger | undefined;
+let registryBatchCounter = 0;
+
+export function configureNpmRegistryDebug(debugLog?: DebugLogger): void {
+  registryDebugLog = debugLog;
+  registryBatchCounter = 0;
+}
+
+function nextRegistryBatchId(): string {
+  registryBatchCounter += 1;
+  return `r-${String(registryBatchCounter).padStart(2, "0")}`;
+}
+
 export function clearPackumentCache(): void {
   packumentCache.clear();
 }
@@ -33,17 +47,51 @@ export async function fetchPackument(packageName: string): Promise<Packument | n
     .replace(/%40/g, "@")
     .replace(/%2F/g, "/")}`;
 
+  const batchId = registryDebugLog ? nextRegistryBatchId() : "";
+  const startedAt = registryDebugLog ? Date.now() : 0;
+  if (registryDebugLog) {
+    registryDebugLog("Registry fetch", { batchId, package: packageName, url });
+  }
+
   try {
     const response = await fetch(url);
     if (!response.ok) {
+      if (registryDebugLog) {
+        registryDebugLog("Registry response", {
+          batchId,
+          package: packageName,
+          status: response.status,
+          durationMs: Date.now() - startedAt,
+          versionsCount: 0,
+        });
+      }
       packumentCache.set(packageName, null);
       return null;
     }
 
     const json = (await response.json()) as Packument;
+    if (registryDebugLog) {
+      registryDebugLog("Registry response", {
+        batchId,
+        package: packageName,
+        status: response.status,
+        durationMs: Date.now() - startedAt,
+        versionsCount: Object.keys(json.versions ?? {}).length,
+      });
+    }
     packumentCache.set(packageName, json);
     return json;
-  } catch {
+  } catch (error) {
+    if (registryDebugLog) {
+      registryDebugLog("Registry fetch failed", {
+        batchId,
+        package: packageName,
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error
+          ? { message: error.message, stack: error.stack }
+          : String(error),
+      });
+    }
     packumentCache.set(packageName, null);
     return null;
   }

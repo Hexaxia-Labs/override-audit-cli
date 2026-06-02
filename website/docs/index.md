@@ -22,4 +22,4 @@ CVE Lite CLI is designed around short local feedback loops: scan a lockfile, und
 
 - [Comparison with Other Tools](./comparison.md) compares CVE Lite CLI with Dependabot, npm audit, OSV-Scanner, Snyk, and Socket.
 - [Parser Coverage](./parser-coverage.md) documents package-manager support and fallback behavior.
-- [Case Studies](./case-studies/owasp-juice-shop.md) show real project scans and remediation journeys — including verified lockfile snapshots for [Astro](./case-studies/astro.md) (pnpm, 2,228 packages), [Turborepo](./case-studies/turborepo.md) (pnpm, 1,776 packages), and [Visual Studio Code](./case-studies/vscode.md) (npm root lockfile, 1,374 packages).
+- [Case Studies](./case-studies/owasp-juice-shop.md) show real project scans and remediation journeys — including verified lockfile snapshots for [Astro](./case-studies/astro.md) (pnpm, 2,228 packages), [Turborepo](./case-studies/turborepo.md) (pnpm, 1,776 packages), [Visual Studio Code](./case-studies/vscode.md) (npm root lockfile, 1,374 packages), and [Storybook](./case-studies/storybook.md) (Yarn Berry, 3,008 packages).

@@ -1,6 +1,6 @@
 {
   "name": "cve-lite-cli",
-  "version": "1.18.1",
+  "version": "1.18.2",
   "description": "Developer-friendly CLI for scanning JS/TS projects for dependency vulnerabilities using local lockfiles and OSV",
   "type": "module",
   "bin": {

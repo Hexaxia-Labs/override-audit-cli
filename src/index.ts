@@ -11,6 +11,7 @@ import { normalizeSeverity } from "./osv/severity.js";
 import { DEFAULT_BATCH_SIZE, DEFAULT_SEARCH_DEPTH, severityOrder } from "./constants.js";
 import { chalk } from "./utils/chalk.js";
 import { createSpinner } from "./output/spinner.js";
+import { createDebugLogger, type DebugLogger } from "./output/debug.js";
 import { buildSuggestedFixCommandPlan } from "./remediation/fix-commands.js";
 import { scanProjectForPackageUsage } from "./usage/scanner.js";
 import { getCliVersion } from "./utils/version-info.js";
@@ -21,6 +22,7 @@ import {
   isRateLimitError,
   isServerError,
   isSslCertificateError,
+  offlineDbSyncHint,
   rateLimitAdvisoryRequestHint,
   serverAdvisoryRequestHint,
   sslCertificateErrorHint,
@@ -84,9 +86,18 @@ if (parsedArgs) {
   const projectPath = path.resolve(projectArg || ".");
   const batchSize = Number(options.batchSize || DEFAULT_BATCH_SIZE);
   const searchDepth = Math.max(0, Number(options.searchDepth || DEFAULT_SEARCH_DEPTH));
+  const debugSession = createDebugLogger(!!options.debug);
+  const debugLog = debugSession.log;
+  const scanStartedAt = Date.now();
 
   async function main() {
     printBanner(options);
+    debugSession.announcePath();
+
+    debugLog("CLI started", {
+      version: cliVersion,
+      args: process.argv.slice(2),
+    });
 
     if (command === "config") {
       const { configSubcommand } = parsedArgs!;
@@ -120,6 +131,10 @@ if (parsedArgs) {
       }
       process.env.NODE_EXTRA_CA_CERTS = resolvedCaCert;
     }
+    debugLog("Config loaded", {
+      caCert: resolvedCaCert ?? null,
+      nodeExtraCaCerts: process.env.NODE_EXTRA_CA_CERTS ?? null,
+    });
 
     if (command === "advisories-sync") {
       const spinner = createSpinner("Preparing advisory sync...", options);
@@ -165,8 +180,14 @@ if (parsedArgs) {
         osvUrl: options.osvUrl,
         offline: options.offline,
         offlineDb: options.offlineDb,
+        debugLog,
       });
       advisorySourceLine = advisorySource.sourceLabel;
+      debugLog("Advisory source", {
+        mode: advisorySource.offline ? "offline" : "online",
+        url: options.osvUrl ?? (advisorySource.offline ? null : "https://api.osv.dev"),
+        label: advisorySourceLine,
+      });
       if (advisorySource.offline) {
         const metadata = advisorySource.advisoryDbMetadata;
         advisoryDbFreshnessLine = formatAdvisoryDbFreshness(metadata?.lastSyncAt ?? null);
@@ -179,7 +200,8 @@ if (parsedArgs) {
       advisorySource.cleanup();
     } catch (error) {
       if (options.offline || options.offlineDb) {
-        throw new Error(`Offline advisory database is not available: ${error instanceof Error ? error.message : String(error)}`);
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new Error(`Offline advisory database is not available: ${reason}\n${offlineDbSyncHint(options.offlineDb).join("\n")}`);
       }
       throw error;
     }
@@ -199,6 +221,16 @@ if (parsedArgs) {
 
     let scanInput = loadPackages(projectPath, !!options.prodOnly, searchDepth);
     let packages = scanInput.packages;
+    if (scanInput.filePath) {
+      debugLog("Lockfile selected", {
+        source: scanInput.source,
+        path: scanInput.filePath,
+      });
+    }
+    debugLog("Packages parsed", {
+      count: packages.length,
+      source: scanInput.source,
+    });
 
     logInfo(
       `Parsed ${packages.length} ${pluralize(packages.length, "package")} from ${scanInput.source}${
@@ -215,6 +247,7 @@ if (parsedArgs) {
     }
 
     if (packages.length === 0) {
+      debugLog("Scan skipped", { reason: "no packages found", projectPath });
       logWarn(buildNoPackagesMessage(projectPath), options);
       process.exit(0);
       return;
@@ -225,6 +258,7 @@ if (parsedArgs) {
       batchSize,
       options,
       projectPath,
+      debugLog,
     });
     const findingsBeforeFix = scanState.sorted.length;
     let fixResult: FixExecutionResult | null = null;
@@ -235,6 +269,7 @@ if (parsedArgs) {
         projectPath,
         totalFindings: scanState.sorted.length,
         options,
+        debugLog,
       });
 
       if (fixResult.appliedFixCount > 0) {
@@ -242,6 +277,7 @@ if (parsedArgs) {
         scanInput = loadPackages(projectPath, !!options.prodOnly, searchDepth);
         packages = scanInput.packages;
         if (packages.length === 0) {
+          debugLog("Scan skipped", { reason: "no packages found after fix rescan", projectPath });
           logWarn(buildNoPackagesMessage(projectPath), options);
           process.exit(0);
           return;
@@ -252,6 +288,7 @@ if (parsedArgs) {
           batchSize,
           options,
           projectPath,
+          debugLog,
         });
       }
     }
@@ -321,6 +358,12 @@ if (parsedArgs) {
       console.log(`${chalk.gray("Report:")} ${chalk.cyan(reportPath)}`);
     }
 
+    debugLog("Scan finished", {
+      totalDurationMs: Date.now() - scanStartedAt,
+      findings: scanState.sorted.length,
+      packages: packages.length,
+    });
+
     const failLevel = normalizeSeverity(options.failOn);
     const shouldFail = scanState.sorted.some(f => severityOrder[f.severity] >= severityOrder[failLevel]);
     process.exit(shouldFail ? 1 : 0);
@@ -330,6 +373,9 @@ if (parsedArgs) {
   main().catch((error) => {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(chalk.red(`Error: ${errorMessage}`));
+    if (options.debug && error instanceof Error && error.stack) {
+      debugLog("Unhandled error", { message: error.message, stack: error.stack });
+    }
     if (isSslCertificateError(error)) {
       const [hint, ...rest] = sslCertificateErrorHint();
       console.error(chalk.yellow(hint));
@@ -361,31 +407,52 @@ async function scanProject(params: {
   batchSize: number;
   options: ParsedOptions;
   projectPath: string;
+  debugLog: DebugLogger;
 }) {
   const directDependencyNames = readDirectDependencyNames(params.projectPath, !!params.options.prodOnly);
   const findings = await scanPackages(params.scanInput.packages, params.batchSize, params.options, {
     directDependencyNames,
     scanSource: params.scanInput.source,
     scanFilePath: params.scanInput.filePath,
-  });
+  }, params.debugLog);
 
   if (params.options.usage) {
     logInfo(`Scanning project source for usage hints...`, params.options);
+    const usageStartedAt = Date.now();
     const pkgNames = new Set(findings.map(f => f.pkg.name));
     const usageData = scanProjectForPackageUsage(params.projectPath, pkgNames);
+    let matchedPackages = 0;
     for (const finding of findings) {
       const files = usageData[finding.pkg.name];
       if (files) {
+        if (files.length > 0) {
+          matchedPackages += 1;
+        }
         finding.usage = {
           imported: files.length > 0,
           files,
         };
       }
     }
+    if (params.options.debug) {
+      params.debugLog("Usage scan", {
+        durationMs: Date.now() - usageStartedAt,
+        packagesChecked: pkgNames.size,
+        matchedPackages,
+      });
+    }
   }
   let finalFindings = findings;
   if (params.options.onlyUsed) {
+    const beforeCount = finalFindings.length;
     finalFindings = finalFindings.filter(f => f.usage?.imported);
+    if (params.options.debug) {
+      params.debugLog("Findings filtered", {
+        reason: "only-used",
+        before: beforeCount,
+        after: finalFindings.length,
+      });
+    }
   }
 
   const offline = !!params.options.offline || !!params.options.offlineDb;

@@ -5,7 +5,7 @@ import { LocalAdvisoryDatabase } from "./local-db.js";
 export class LocalAdvisorySource implements AdvisorySource {
   constructor(private readonly db: LocalAdvisoryDatabase) {}
 
-  queryBatch(packages: PackageRef[]): Promise<AdvisoryResult[]> {
+  queryBatch(packages: PackageRef[], _meta?: { batchId?: string }): Promise<AdvisoryResult[]> {
     const results = packages.map(pkg => ({
       package: pkg.name,
       version: pkg.version,

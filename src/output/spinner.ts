@@ -3,7 +3,7 @@ import type { Spinner } from "../types.js";
 import { chalk } from "../utils/chalk.js";
 
 export function createSpinner(initialMessage: string, options?: { json?: boolean }): Spinner {
-  const enabled = Boolean(process.stdout.isTTY);
+  const enabled = Boolean(process.stdout.isTTY) && !options?.json;
   if (!enabled) {
     return {
       update: () => {},

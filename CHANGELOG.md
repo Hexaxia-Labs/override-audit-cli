@@ -4,9 +4,30 @@ All notable changes to CVE Lite CLI will be documented in this file.
 
 ## [Unreleased]
 
+## [1.18.2] - 2026-06-01
+
+### Added
+- `--debug` flag writes a timestamped JSONL log file alongside the scan with network requests, cache hits, and runtime events; a single stderr line identifies the log file path.
+- Unknown-severity findings no longer silently dropped from compact and verbose terminal output; compact mode now shows all direct unknown findings regardless of how many critical/high findings are present.
+
+### Fixed
+- pnpm v9 aliased dependencies (where the lockfile dep name differs from the real package name, e.g. `'@remix-run/dev': '@vercel/remix-run-dev@1.16.1'`) now resolve correctly through the transitive graph. Five downstream bugs fixed: wrong direct-install commands for unresolvable findings, missing parent upgrade suggestions for deep chains, blank context column for covered findings, and reason text being overwritten by lower-severity findings.
+- Spinner completion lines (`✓ Loaded package matches from cache`, etc.) no longer printed to stdout in `--json` mode.
+- Offline advisory database errors now include a sync hint (`cve-lite advisories sync`) to guide users to resolution.
+- SARIF output no longer includes empty `artifactChanges` arrays in fix objects, which caused GitHub Code Scanning to reject uploaded results.
+- Case studies index page added to resolve a Docusaurus build break.
+
+### Changed
+- CI workflow now declares explicit `permissions: contents: read`, matching the least-privilege stance already in place on all other workflows.
+
+### Tests
+- Unit tests added for `src/cli/validate.ts` covering all flag-conflict validation branches.
+
 ### Docs
-- Visual Studio Code case study added with verified baseline scan of a root npm lockfile snapshot (`examples/vscode/`, 1,374 packages, 9 findings at revision `bc678ca`), including CVE Lite CLI vs `npm audit` comparison.
-- Examples readme, docs sidebar, and README updated to reference the VS Code fixture and case study.
+- Visual Studio Code case study with verified baseline scan of a root npm lockfile snapshot (`examples/vscode/`, 1,374 packages, 9 findings at revision `bc678ca`), including CVE Lite CLI vs `npm audit` comparison.
+- Storybook case study with verified baseline scan of a Yarn Berry monorepo lockfile snapshot (`examples/storybook/`, 3,008 packages, 92 findings at revision `cc19ae1`), including CVE Lite CLI vs `yarn npm audit` comparison.
+- Help Net Security monthly roundup (May 2026) added to press coverage.
+- Case studies navbar link added to website.
 
 ## [1.18.1] - 2026-05-27
 

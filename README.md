@@ -213,8 +213,9 @@ CVE Lite CLI has been evaluated against real open-source projects to verify that
 - [Astro](https://owasp.org/cve-lite-cli/docs/case-studies/astro) — verified baseline scan of a modern pnpm monorepo (2,228 packages, 34 findings at revision `221bb4b`) with a critical transitive SDK chain and four generated fix command groups
 - [Turborepo](https://owasp.org/cve-lite-cli/docs/case-studies/turborepo) — verified baseline scan of a build-system pnpm monorepo (1,776 packages, 13 findings at revision `c85d410`) with a critical no-fix sandbox beta, all-transitive risk, and zero auto-generated fix commands on this snapshot
 - [Visual Studio Code](https://owasp.org/cve-lite-cli/docs/case-studies/vscode) — verified baseline scan of the VS Code root npm lockfile (1,374 packages, 9 findings at revision `bc678ca`) with two direct Anthropic SDK advisories, a high-severity gulp toolchain chain, and two generated fix command groups
+- [Storybook](https://owasp.org/cve-lite-cli/docs/case-studies/storybook) — verified baseline scan of a Yarn Berry monorepo (3,008 packages, 92 findings at revision `cc19ae1`) spanning cross-framework sandbox templates, five critical transitive chains, and one direct vite fix command
 
-In-repo lockfile fixtures for Astro, Turborepo, and Visual Studio Code live under [`examples/`](examples/readme.md) — clone the repo and scan immediately without downloading full upstream checkouts.
+In-repo lockfile fixtures for Astro, Turborepo, Visual Studio Code, and Storybook live under [`examples/`](examples/readme.md) — clone the repo and scan immediately without downloading full upstream checkouts.
 
 These are not demos. They are documented scans against real codebases with real findings, recorded before and after applying fix commands.
 

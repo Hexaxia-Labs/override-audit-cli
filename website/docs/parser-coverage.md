@@ -60,7 +60,7 @@ Each parser handles some details differently. The behaviors below reflect the cu
 
 - **Classic (v1) and Berry (v2/v3) formats supported** via `yarn-lockfile`.
 - **`--prod-only` has no effect with yarn.lock.** Yarn Classic lockfiles don't record a dev/prod distinction, so every resolved entry is scanned regardless of the flag.
-- **Dependency paths are flattened to `project > name`.** Transitive path reconstruction is limited for yarn.lock — this is the MVP behavior noted in the scan output.
+- **Dependency paths are flattened to `project > name`.** Transitive path reconstruction is limited for yarn.lock — this is the MVP behavior noted in the scan output. See the [Storybook case study](./case-studies/storybook.md) for a verified Yarn Berry monorepo example (3,008 packages).
 
 ### bun.lock
 

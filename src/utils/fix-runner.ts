@@ -5,6 +5,7 @@ import type { ParsedOptions } from "../types.js";
 import type { SeverityLabel } from "../types.js";
 import { pluralize } from "./string.js";
 import type { SuggestedFixCommandPlan, SuggestedFixTarget } from "../remediation/fix-commands.js";
+import type { DebugLogger } from "../output/debug.js";
 
 export function buildFixCommandParts(
   packageManager: SuggestedFixCommandPlan["packageManager"],
@@ -26,7 +27,11 @@ export async function runInstallCommand(
   command: string,
   args: string[],
   cwd: string,
+  debugLog?: DebugLogger,
 ): Promise<{ status: number | null; error: Error | null }> {
+  const commandLine = [command, ...args].join(" ");
+  debugLog?.("Fix command", { command: commandLine, cwd });
+
   return await new Promise(resolve => {
     const child = spawn(command, args, {
       cwd,
@@ -37,9 +42,11 @@ export async function runInstallCommand(
     child.stderr.on("data", () => {});
 
     child.on("error", error => {
+      debugLog?.("Fix command finished", { command: commandLine, exitCode: null, error: error.message });
       resolve({ status: null, error });
     });
     child.on("close", code => {
+      debugLog?.("Fix command finished", { command: commandLine, exitCode: code });
       resolve({ status: code, error: null });
     });
   });
@@ -66,6 +73,7 @@ export async function applyFixesIfRequested(params: {
   projectPath: string;
   totalFindings: number;
   options: ParsedOptions;
+  debugLog?: DebugLogger;
 }): Promise<FixExecutionResult> {
   console.log("");
   console.log(chalk.bold.cyan("Applying fixes (--fix)"));
@@ -108,7 +116,12 @@ export async function applyFixesIfRequested(params: {
     const target = directTargets[i];
     const commandParts = buildFixCommandParts(params.plan.packageManager, [target]);
     spinner.update(`Applying direct fix ${i + 1}/${total}: ${commandParts.join(" ")}`);
-    const run = await runInstallCommand(commandParts[0], commandParts.slice(1), params.projectPath);
+    const run = await runInstallCommand(
+      commandParts[0],
+      commandParts.slice(1),
+      params.projectPath,
+      params.debugLog,
+    );
     if (run.error) {
       spinner.fail("Failed to apply fixes");
       throw new Error(`Failed to apply fixes: ${run.error.message}${fixHint}`);

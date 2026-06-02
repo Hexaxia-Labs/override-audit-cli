@@ -55,6 +55,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Case Studies',
+      link: { type: 'doc', id: 'case-studies/index' },
       items: [
         'case-studies/owasp-juice-shop',
         'case-studies/nestjs',
@@ -64,6 +65,7 @@ const sidebars: SidebarsConfig = {
         'case-studies/astro',
         'case-studies/turborepo',
         'case-studies/vscode',
+        'case-studies/storybook',
       ],
     },
   ],

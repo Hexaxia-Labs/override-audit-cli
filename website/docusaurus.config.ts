@@ -2,7 +2,7 @@ import {themes as prismThemes} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
-const latestVersion = 'v1.18.1';
+const latestVersion = 'v1.18.2';
 
 const config: Config = {
   title: 'CVE Lite CLI',
@@ -110,6 +110,12 @@ const config: Config = {
           label: 'Compare',
           position: 'left',
           activeBaseRegex: '^/docs/comparison/?$',
+        },
+        {
+          to: '/docs/case-studies',
+          label: 'Case Studies',
+          position: 'left',
+          activeBaseRegex: '^/docs/case-studies',
         },
         {
           href: 'https://owasp.org/cve-lite-cli',

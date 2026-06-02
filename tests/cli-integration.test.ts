@@ -619,6 +619,57 @@ describe("CLI integration", () => {
     expect(stripAnsi(result.stdout[2] ?? "")).toContain("Advisory DB freshness: synced");
   });
 
+  it("prints the advisories sync hint when the offline DB cannot be opened", async () => {
+    const createAdvisorySourceMock = (await import("../src/scanner.js")).createAdvisorySource as jest.Mock;
+    createAdvisorySourceMock.mockImplementationOnce(() => {
+      throw new Error("file does not exist");
+    });
+
+    parseArgsMock.mockReturnValue({
+      command: "scan",
+      options: {
+        offline: true,
+        failOn: "critical",
+        batchSize: "100",
+        searchDepth: "4",
+        minSeverity: "medium",
+      },
+      projectArg: ".",
+    });
+
+    const result = await runIndexModule();
+
+    expect(result.exitCode).toBe(1);
+    expect(stripAnsi(result.stderr.join("\n"))).toContain("Offline advisory database is not available: file does not exist");
+    expect(stripAnsi(result.stderr.join("\n"))).toContain("To build it, run: cve-lite advisories sync");
+  });
+
+  it("prints the requested output path when a custom offline DB cannot be opened", async () => {
+    const createAdvisorySourceMock = (await import("../src/scanner.js")).createAdvisorySource as jest.Mock;
+    createAdvisorySourceMock.mockImplementationOnce(() => {
+      throw new Error("permission denied");
+    });
+
+    parseArgsMock.mockReturnValue({
+      command: "scan",
+      options: {
+        offlineDb: "/tmp/custom-advisories.db",
+        failOn: "critical",
+        batchSize: "100",
+        searchDepth: "4",
+        minSeverity: "medium",
+      },
+      projectArg: ".",
+    });
+
+    const result = await runIndexModule();
+
+    expect(result.exitCode).toBe(1);
+    expect(stripAnsi(result.stderr.join("\n"))).toContain("Offline advisory database is not available: permission denied");
+    expect(stripAnsi(result.stderr.join("\n"))).toContain("To build it, run: cve-lite advisories sync");
+    expect(stripAnsi(result.stderr.join("\n"))).toContain("cve-lite advisories sync --output /tmp/custom-advisories.db");
+  });
+
   it("warns when the local advisory DB appears stale", async () => {
     const createAdvisorySourceMock = (await import("../src/scanner.js")).createAdvisorySource as jest.Mock;
     createAdvisorySourceMock.mockReturnValueOnce({

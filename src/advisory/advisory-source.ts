@@ -7,6 +7,6 @@ export interface AdvisoryResult {
 }
 
 export interface AdvisorySource {
-  queryBatch(packages: PackageRef[]): Promise<AdvisoryResult[]>;
+  queryBatch(packages: PackageRef[], meta?: { batchId?: string }): Promise<AdvisoryResult[]>;
   getVuln(id: string): Promise<OsvVuln>;
 }

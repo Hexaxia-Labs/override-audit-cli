@@ -25,6 +25,8 @@ import {
   printTable,
 } from "../src/output/printers.js";
 import { stripAnsi } from "../src/utils/chalk.js";
+import { createDebugLogger } from "../src/output/debug.js";
+import { createSpinner } from "../src/output/spinner.js";
 import type { Finding, OsvVuln, ScanInput } from "../src/types.js";
 
 function createFinding(overrides?: Partial<Finding>): Finding {
@@ -108,7 +110,51 @@ function captureLogs(run: () => void): string[] {
   return logs.map(line => stripAnsi(line));
 }
 
+function captureErrors(run: () => void): string[] {
+  const logs: string[] = [];
+  const spy = jest.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+    logs.push(args.map(arg => String(arg)).join(" "));
+  });
+
+  try {
+    run();
+  } finally {
+    spy.mockRestore();
+  }
+
+  return logs;
+}
+
 describe("output formatters", () => {
+  it("announces debug log file path to stderr when enabled", () => {
+    const disabledLines = captureErrors(() => {
+      const debug = createDebugLogger(false);
+      debug.log("should not print");
+      debug.announcePath();
+    });
+
+    const appendSpy = jest.spyOn(fs, "appendFileSync").mockImplementation(() => undefined);
+    try {
+      const enabledLines = captureErrors(() => {
+        const debug = createDebugLogger(true);
+        debug.log("cache hit");
+        debug.log("request", { url: "https://api.osv.dev/v1/querybatch" });
+        debug.announcePath();
+      });
+
+      expect(disabledLines).toEqual([]);
+      expect(enabledLines[0]).toContain("[debug] Writing debug log to ./cve-lite-debug-");
+      expect(appendSpy).toHaveBeenCalled();
+    } finally {
+      appendSpy.mockRestore();
+      for (const entry of fs.readdirSync(process.cwd())) {
+        if (entry.startsWith("cve-lite-debug-") && entry.endsWith(".log")) {
+          fs.unlinkSync(path.join(process.cwd(), entry));
+        }
+      }
+    }
+  });
+
   it("getPrimaryParent returns null for paths shorter than 3 nodes", () => {
     const shortPath = createFinding({
       dependencyPaths: [["project", "lodash"]],
@@ -190,6 +236,15 @@ describe("output formatters", () => {
     } finally {
       fs.rmSync(cacheDir, { recursive: true, force: true });
     }
+  });
+
+  it("suppresses logInfo, logWarn, and printCacheSummary when json: true", () => {
+    const logs = captureLogs(() => {
+      logInfo("should not appear", { json: true });
+      logWarn("should not appear either", { json: true });
+      printCacheSummary(undefined, { json: true });
+    });
+    expect(logs).toHaveLength(0);
   });
 
   it("builds a package-manager-aware fix command plan for urgent findings", () => {
@@ -1732,7 +1787,7 @@ describe("printCompactOutput CVE count", () => {
         ],
       }),
     ];
-    printCompactOutput(findings, 100, createScanInput(), {});
+    printCompactOutput(findings, createScanInput(), {});
     const allOutput = consoleSpy.mock.calls.map(c => stripAnsi(String(c[0]))).join("\n");
     expect(allOutput).toContain("2 packages");
     expect(allOutput).toContain("3 CVEs");
@@ -1785,5 +1840,47 @@ describe("countUniqueAdvisories", () => {
       ],
     });
     expect(countUniqueAdvisories([f1, f2])).toBe(3);
+  });
+});
+
+describe("createSpinner", () => {
+  let isTTYDescriptor: PropertyDescriptor | undefined;
+
+  beforeEach(() => {
+    isTTYDescriptor = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+    Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
+  });
+
+  afterEach(() => {
+    if (isTTYDescriptor) {
+      Object.defineProperty(process.stdout, "isTTY", isTTYDescriptor);
+    } else {
+      Object.defineProperty(process.stdout, "isTTY", { value: undefined, configurable: true });
+    }
+  });
+
+  it("succeed() prints to stdout when not in json mode", () => {
+    const logs = captureLogs(() => {
+      const spinner = createSpinner("Loading...");
+      spinner.stop();
+      spinner.succeed("Done");
+    });
+    expect(logs.some(l => l.includes("Done"))).toBe(true);
+  });
+
+  it("succeed() is suppressed when json: true even in a TTY", () => {
+    const logs = captureLogs(() => {
+      const spinner = createSpinner("Loading...", { json: true });
+      spinner.succeed("Done");
+    });
+    expect(logs).toHaveLength(0);
+  });
+
+  it("fail() is suppressed when json: true", () => {
+    const logs = captureLogs(() => {
+      const spinner = createSpinner("Loading...", { json: true });
+      spinner.fail("Error");
+    });
+    expect(logs).toHaveLength(0);
   });
 });

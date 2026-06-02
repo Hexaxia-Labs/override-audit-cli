@@ -158,6 +158,7 @@ export type CliCommand = "scan" | "advisories-sync" | "install-skill" | "config"
 export type ParsedOptions = {
   version?: boolean;
   json?: boolean;
+  debug?: boolean;
   verbose?: boolean;
   fix?: boolean;
   prodOnly?: boolean;

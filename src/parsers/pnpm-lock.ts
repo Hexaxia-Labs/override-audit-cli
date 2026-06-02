@@ -229,6 +229,9 @@ function normalizePnpmDepRefV9(depName: string, depRef: unknown): string | null 
     const cleaned = depRef.replace(/^link:/, "").replace(/^workspace:/, "").split("(")[0];
     if (!cleaned || cleaned.startsWith(".") || cleaned.startsWith("..")) return null;
     if (looksLikeVersion(cleaned)) return `${depName}@${cleaned}`;
+    // Handle aliased deps where the ref is a full "pkgName@version" key (e.g. '@remix-run/dev': '@vercel/remix-run-dev@1.16.1')
+    const atIdx = cleaned.lastIndexOf("@");
+    if (atIdx > 0 && looksLikeVersion(cleaned.slice(atIdx + 1))) return cleaned;
   }
 
   if (depRef && typeof depRef === "object") {

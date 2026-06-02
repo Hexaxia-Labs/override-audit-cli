@@ -110,6 +110,13 @@ describe("writeOutputs", () => {
     });
   });
 
+  it("logs the saved filename to stdout when json: true", async () => {
+    await writeOutputs(makeOptions({ json: true }), mockScanState, mockScanInput, "/tmp/project");
+    const logged = consoleSpy.mock.calls.map(call => call.join(" ")).join("\n");
+    expect(logged).toContain("JSON saved to");
+    expect(logged).toMatch(/cve-lite-scan-.*\.json/);
+  });
+
   it("does NOT call writeSarifReport when sarif is not set", async () => {
     await writeOutputs(makeOptions(), mockScanState, mockScanInput, "/tmp/project");
     expect(writeSarifReportMock).not.toHaveBeenCalled();

@@ -49,6 +49,14 @@ Lockfile-only snapshot from [microsoft/vscode](https://github.com/microsoft/vsco
 |---|---|---|---|
 | `vscode` | npm | https://github.com/microsoft/vscode | Developer-tool root lockfile — 1,374 packages, 9 findings (2 direct). |
 
+## In-repo snapshot: Storybook
+
+Lockfile-only snapshot from [storybookjs/storybook](https://github.com/storybookjs/storybook) at revision `cc19ae1a2145e8f7cda8dc869f1b90d5346dcedb`. Commits `package.json` and `yarn.lock` only — no application source. [Case study](../website/docs/case-studies/storybook.md).
+
+| Folder | Package Manager | Source | Purpose |
+|---|---|---|---|
+| `storybook` | Yarn Berry | https://github.com/storybookjs/storybook | Cross-framework UI tooling monorepo — 3,008 packages, 92 findings. |
+
 ## Local-only examples
 
 Full project clones used for real-world testing. Not committed to this repo — clone each separately into `examples/` for local use.
@@ -91,6 +99,9 @@ node dist/index.js examples/turborepo --verbose --all
 
 # In-repo snapshot: Visual Studio Code
 node dist/index.js examples/vscode --verbose --all
+
+# In-repo snapshot: Storybook
+node dist/index.js examples/storybook --verbose --all
 
 # Local-only (clone first)
 node dist/index.js examples/analog --verbose

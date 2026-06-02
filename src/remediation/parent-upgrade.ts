@@ -40,14 +40,19 @@ export async function resolveRecommendedParentUpgrade(
   }
 
   // Best-effort fallback for deeper chains.
+  // Use the immediate child of the direct parent (not the immediate parent of the vulnerable
+  // package) — that's what the direct parent actually lists in its own dependencies.
+  const directParentIdx = viaPath.indexOf(directParentName);
+  if (directParentIdx < 0) return null;
+  const immediateChildName = viaPath[directParentIdx + 1] ?? immediateParentName;
   return findUpgradeForImmediateIntermediate({
     directParentName,
     directParentVersion: directParent.version,
-    immediateParentName,
-    immediateParentInstalledVersion: findPackageVersion(
+    immediateChildName,
+    immediateChildInstalledVersion: findPackageVersion(
       packages,
-      immediateParentName,
-      viaPath.slice(0, -1),
+      immediateChildName,
+      viaPath.slice(0, directParentIdx + 2),
     ) ?? "",
     vulnerableName,
     viaPath,
@@ -175,8 +180,8 @@ async function findUpgradeForExactDirectChild(
 type ImmediateIntermediateArgs = {
   directParentName: string;
   directParentVersion: string;
-  immediateParentName: string;
-  immediateParentInstalledVersion: string;
+  immediateChildName: string;
+  immediateChildInstalledVersion: string;
   vulnerableName: string;
   viaPath: string[];
 };
@@ -184,7 +189,7 @@ type ImmediateIntermediateArgs = {
 async function findUpgradeForImmediateIntermediate(
   args: ImmediateIntermediateArgs,
 ): Promise<RecommendedParentUpgrade | null> {
-  if (!args.immediateParentInstalledVersion || !looksLikeVersion(args.immediateParentInstalledVersion)) {
+  if (!args.immediateChildInstalledVersion || !looksLikeVersion(args.immediateChildInstalledVersion)) {
     return null;
   }
 
@@ -198,17 +203,17 @@ async function findUpgradeForImmediateIntermediate(
   for (const version of versions) {
     const manifest = packument?.versions?.[version];
     const depRange =
-      manifest?.dependencies?.[args.immediateParentName] ??
-      manifest?.optionalDependencies?.[args.immediateParentName];
+      manifest?.dependencies?.[args.immediateChildName] ??
+      manifest?.optionalDependencies?.[args.immediateChildName];
 
     if (!depRange) continue;
 
-    const stillAllowsImmediateParentInstalled = versionSatisfiesRange(
-      args.immediateParentInstalledVersion,
+    const stillAllowsInstalledChild = versionSatisfiesRange(
+      args.immediateChildInstalledVersion,
       depRange,
     );
 
-    if (!stillAllowsImmediateParentInstalled) {
+    if (!stillAllowsInstalledChild) {
       return {
         package: args.directParentName,
         currentVersion: args.directParentVersion,
@@ -216,7 +221,7 @@ async function findUpgradeForImmediateIntermediate(
         viaPath: args.viaPath,
         vulnerablePackage: args.vulnerableName,
         confidence: "best-effort",
-        reason: `${args.directParentName}@${version} no longer allows ${args.immediateParentName}@${args.immediateParentInstalledVersion} in the current path`,
+        reason: `${args.directParentName}@${version} no longer allows ${args.immediateChildName}@${args.immediateChildInstalledVersion} in the current path`,
       };
     }
   }

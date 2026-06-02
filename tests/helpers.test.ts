@@ -46,6 +46,7 @@ describe("parseArgs", () => {
   it("parses flags, inline values, and a project path together", () => {
     const result = parseArgs([
       "--json",
+      "--debug",
       "--fix",
       "--verbose",
       "--prod-only",
@@ -69,6 +70,7 @@ describe("parseArgs", () => {
       command: "scan",
       options: {
         json: true,
+        debug: true,
         fix: true,
         verbose: true,
         prodOnly: true,

@@ -126,13 +126,27 @@ export function buildSuggestedFixCommandPlan(
   for (const finding of orderedFindings) {
     const urgent = finding.severity === "critical" || finding.severity === "high";
 
-    if (finding.relationship === "direct" || finding.relationship === "unknown") {
+    if (finding.relationship === "direct") {
       const hasValidatedField = Object.prototype.hasOwnProperty.call(finding, "validatedFirstFixedVersion");
       const directTarget = finding.validatedFirstFixedVersion ?? finding.firstFixedVersion;
       // In offline mode validateDirectFixTargets never runs, so an unset
       // validatedFirstFixedVersion is "did not validate" rather than "validation
       // failed" — fall back to the advisory hint instead of dropping the target.
       const validatedFieldOk = offline || !hasValidatedField || finding.validatedFirstFixedVersion !== null;
+      const allVersionsVulnerable =
+        finding.validatedTargetScannedVersions != null &&
+        finding.validatedTargetKnownVulnerableVersions != null &&
+        finding.validatedTargetScannedVersions > 0 &&
+        finding.validatedTargetKnownVulnerableVersions >= finding.validatedTargetScannedVersions;
+      if (directTarget && allVersionsVulnerable) {
+        skippedByKey.set(`direct:${finding.pkg.name}@${finding.pkg.version}`, {
+          package: finding.pkg.name,
+          version: finding.pkg.version,
+          relationship: finding.relationship,
+          reason: `No safe upgrade: all ${finding.validatedTargetScannedVersions} scanned ${pluralize(finding.validatedTargetScannedVersions ?? 0, "version")} are still known-vulnerable. This package may be unmaintained.`,
+        });
+        continue;
+      }
       if (
         directTarget &&
         isUpgradeTarget(finding.pkg.version, directTarget) &&
@@ -187,6 +201,16 @@ export function buildSuggestedFixCommandPlan(
             : "No safe upgrade target is known for this direct dependency.",
         });
       }
+      continue;
+    }
+
+    if (finding.relationship === "unknown") {
+      skippedByKey.set(`unknown:${finding.pkg.name}@${finding.pkg.version}`, {
+        package: finding.pkg.name,
+        version: finding.pkg.version,
+        relationship: finding.relationship,
+        reason: `Dependency path for ${finding.pkg.name}@${finding.pkg.version} could not be resolved in the lockfile. Inspect your lockfile to identify which package pulls it in.`,
+      });
       continue;
     }
 
@@ -429,9 +453,13 @@ export function findSuggestedCommandForFinding(
     }
 
     if (finding.recommendedParentUpgrade) {
+      if (item.package !== finding.recommendedParentUpgrade.package) return false;
+      if (item.targetVersion === finding.recommendedParentUpgrade.targetVersion) return true;
+      // A command targeting a higher version also satisfies a lower-version recommendation
       return (
-        item.package === finding.recommendedParentUpgrade.package &&
-        item.targetVersion === finding.recommendedParentUpgrade.targetVersion
+        looksLikeVersion(item.targetVersion) &&
+        looksLikeVersion(finding.recommendedParentUpgrade.targetVersion) &&
+        compareVersions(item.targetVersion, finding.recommendedParentUpgrade.targetVersion) >= 0
       );
     }
 
@@ -496,7 +524,11 @@ function upsertTarget(
     if (compareVersions(next.targetVersion, existing.targetVersion) > 0) {
       merged.targetVersion = next.targetVersion;
       merged.currentVersion = next.currentVersion ?? merged.currentVersion;
-      merged.reason = next.reason;
+      // Keep the reason from the higher-severity finding so the most critical issue is visible
+      // in the context column. Only update the reason if next has strictly higher severity.
+      if (severityOrder[next.severity] > severityOrder[existing.severity]) {
+        merged.reason = next.reason;
+      }
       merged.scannedVersions = next.scannedVersions ?? merged.scannedVersions ?? null;
       merged.knownVulnerableVersions = next.knownVulnerableVersions ?? merged.knownVulnerableVersions ?? null;
     }
