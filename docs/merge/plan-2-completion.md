@@ -84,16 +84,27 @@ The eight OA detectors and their supporting infrastructure ported into `src/over
 
 ## Test results
 
+After the Plan 2 gate (Task 14):
+
 ```
 $ npm test
 Test Suites: 42 passed, 42 total
 Tests:       505 passed, 505 total
-Time:        ~2 s
+```
+
+After the pre-Plan-3 sanity check (added at `a2f467c`):
+
+```
+$ npm test
+Test Suites: 44 passed, 44 total
+Tests:       515 passed, 515 total
+Time:        ~3 s
 ```
 
 - 376 Plan 1 baseline tests still pass (zero regressions in cve-lite's pre-existing suite or in Plan 1's foundation tests)
-- 129 net new Plan 2 tests added, all green
-- 42 test suites pass cleanly
+- 129 net new Plan 2 tests added at the gate, all green
+- 10 additional sanity tests added at `a2f467c` (7 port-equivalence + 3 dogfood), all green
+- 44 test suites pass cleanly
 
 ```
 $ npx tsc --noEmit
@@ -173,14 +184,19 @@ These are intentional per the spec's "OA severity mapping" section.
 
 **Version utilities (14 tests).** majorVersion/coerceVersion/isValidRange/satisfiesRange across the operator surface (`^`, `~`, `>=`, `<=`, `>`, `<`, `=`, exact) plus invalid input.
 
-### What is NOT verified in this branch
+### What IS verified after the sanity check (added post-gate)
 
-- **No side-by-side equivalence proof** between preserved `detect()` and ported `detect()`. The migrated tests assert on the new shape; if a detector was subtly broken in transit, only the test fixtures the assertions actually cover would catch it. The fixtures are the same fixtures the preserved tests used, so the coverage matches what override-audit had, but it is not a strict bit-for-bit equivalence proof.
-- **No real-project run.** Sonu's Analog/Ghost/Prisma findings have not been reproduced against the merged code yet. That's a Plan 6 dogfood task.
-- **No `audit()` or `verify()` entrypoint exercise.** Those are Plan 3.
-- **No CLI run.** `cve-lite overrides` does not exist as a subcommand yet (Plan 4).
-- **No `--fix` integration test.** Plan 4.
-- **No audit-log emission from detectors.** Detectors are pure (no `ctx.auditLog.emit` calls). Emission is the runner's job in Plan 3 + Plan 5.
+- **Side-by-side equivalence for OA001/OA002/OA003/OA004/OA006/OA007/OA008.** `tests/sanity/port-equivalence.test.ts` imports both preserved `_preserved-override-audit/src/detectors/*` and ported `src/overrides/detectors/*` into the same Jest run, calls each on identical synthetic fixtures, and asserts equivalent findings after normalizing for the intentional shape changes (rule-ID shortening, package string vs object, fix op location). 7/7 pass. OA005 deferred (its sub-rule codes diverge between preserved long form and new short form; 14 migrated tests cover the same fixture intent).
+- **Sonu's known-positive findings reproduce on real projects.** `tests/sanity/dogfood.test.ts` runs `ALL_DETECTORS` via `buildOverrideContext` against `cve-lite-ref/examples/ghost`, `cve-lite-ref/examples/prisma`, and `~/Projects/hexmetrics`. Ghost: 4x OA001 orphans including the two `>cheerio` entries Sonu flagged + 1x OA002 floating-tag on `@tryghost/logging`. Prisma: 1x OA001 on `@azure/msal-node>uuid`. Hexmetrics (only target with `node_modules`): 1x OA006 on `postcss` (override fights an exact-pinned parent).
+
+### What is still NOT verified in this branch
+
+- **`audit()` or `verify()` entrypoint exercise.** Those are Plan 3.
+- **CLI run.** `cve-lite overrides` does not exist as a subcommand yet (Plan 4).
+- **`--fix` integration test.** Plan 4.
+- **Audit-log emission from detectors.** Detectors are pure (no `ctx.auditLog.emit` calls). Emission is the runner's job in Plan 3 + Plan 5.
+- **Analog example.** Sonu's third example was Analog; it is not present in `cve-lite-ref/examples/` at our rebased baseline. If it lands in a later cve-lite ref, we will exercise it in Phase 2 group testing.
+- **OA005 side-by-side.** Its sub-rule shapes diverge between preserved and new; the 14 migrated unit tests cover its fixture intent. A follow-up could add a normalized OA005 equivalence pass.
 
 ### Preserved-suite sanity comparison
 
