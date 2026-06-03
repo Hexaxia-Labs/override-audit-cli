@@ -170,6 +170,22 @@ if (parsedArgs) {
       return;
     }
 
+    if (command === "overrides") {
+      const { runOverrides } = await import("./cli/overrides.js");
+      const logger = {
+        info: (msg: string) => console.log(msg),
+        warn: (msg: string) => console.warn(msg),
+        error: (msg: string) => console.error(msg),
+        debug: (msg: string) => console.debug(msg),
+      };
+      const exitCode = await runOverrides({
+        projectArg,
+        options,
+        logger,
+      });
+      process.exit(exitCode);
+    }
+
     validateOptions(options);
 
     let advisorySourceLine: string;
