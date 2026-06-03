@@ -58,4 +58,45 @@ describe("buildOverrideContext", () => {
     const ids = ctx.skippedDetectors.map((s) => s.ruleId);
     expect(ids).toEqual(expect.arrayContaining(["OA001", "OA004", "OA006", "OA008"]));
   });
+
+  it("reads yarn.lock package names", () => {
+    writeFileSync(join(dir, "package.json"), JSON.stringify({
+      name: "x",
+      resolutions: { lodash: "4.17.21" },
+    }));
+    writeFileSync(join(dir, "yarn.lock"), [
+      "# yarn lockfile v1",
+      "",
+      "lodash@4.17.21:",
+      '  version "4.17.21"',
+      '  resolved "https://registry.yarnpkg.com/lodash/-/lodash-4.17.21.tgz"',
+      "",
+    ].join("\n"));
+
+    const ctx = buildOverrideContext(dir, {
+      auditLog: NULL_AUDIT_LOG,
+      logger: makeNoopLogger() as any,
+      checkNetwork: false,
+    });
+
+    expect(ctx.packageManager).toBe("yarn");
+    expect(ctx.lockfilePackageNames.has("lodash")).toBe(true);
+  });
+
+  it("detects bun package manager when bun.lock exists", () => {
+    writeFileSync(join(dir, "package.json"), JSON.stringify({
+      name: "x",
+      overrides: { lodash: "4.17.21" },
+    }));
+    // Minimal bun.lock for detection purposes
+    writeFileSync(join(dir, "bun.lock"), "");
+
+    const ctx = buildOverrideContext(dir, {
+      auditLog: NULL_AUDIT_LOG,
+      logger: makeNoopLogger() as any,
+      checkNetwork: false,
+    });
+
+    expect(ctx.packageManager).toBe("bun");
+  });
 });

@@ -6,6 +6,8 @@ import { extractOverrideEntries } from "./parsing/package-json.js";
 import { walkInstalledTree } from "./parsing/installed-tree.js";
 import { loadFromPackageLock } from "../parsers/package-lock.js";
 import { loadFromPnpmLock } from "../parsers/pnpm-lock.js";
+import { loadFromYarnLock } from "../parsers/yarn-lock.js";
+import { loadFromBunLock } from "../parsers/bun-lock.js";
 
 export interface BuildOptions {
   auditLog: AuditLogHandle;
@@ -99,6 +101,18 @@ function readLockfileNames(projectPath: string, pm: PackageManager): Set<string>
       const lockPath = join(projectPath, "pnpm-lock.yaml");
       if (!existsSync(lockPath)) return new Set();
       const refs = loadFromPnpmLock(lockPath, false);
+      return new Set(refs.map((r) => r.name));
+    }
+    if (pm === "yarn") {
+      const lockPath = join(projectPath, "yarn.lock");
+      if (!existsSync(lockPath)) return new Set();
+      const refs = loadFromYarnLock(lockPath);
+      return new Set(refs.map((r) => r.name));
+    }
+    if (pm === "bun") {
+      const lockPath = join(projectPath, "bun.lock");
+      if (!existsSync(lockPath)) return new Set();
+      const refs = loadFromBunLock(lockPath, false);
       return new Set(refs.map((r) => r.name));
     }
     return new Set();
