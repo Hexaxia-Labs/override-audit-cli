@@ -40,6 +40,7 @@ const writeOutputsMock = jest.fn<() => Promise<void>>().mockResolvedValue(undefi
 jest.unstable_mockModule("../src/cli/help.js", () => ({
   printBanner: printBannerMock,
   printHelp: printHelpMock,
+  printOverridesHelp: jest.fn<any>(),
 }));
 
 jest.unstable_mockModule("../src/cli/args.js", () => ({

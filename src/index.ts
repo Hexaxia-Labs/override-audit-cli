@@ -2,7 +2,7 @@
 import path from "node:path";
 import process from "node:process";
 import { parseArgs } from "./cli/args.js";
-import { printBanner, printHelp } from "./cli/help.js";
+import { printBanner, printHelp, printOverridesHelp } from "./cli/help.js";
 import { validateOptions } from "./cli/validate.js";
 import { loadPackages, buildNoPackagesMessage } from "./parsers/index.js";
 import { scanPackages, buildCoverageNotes, createAdvisorySource } from "./scanner.js";
@@ -78,7 +78,11 @@ if (parsedArgs) {
   const cliVersion = getCliVersion();
 
   if (options.help) {
-    printHelp();
+    if (command === "overrides") {
+      printOverridesHelp();
+    } else {
+      printHelp();
+    }
     process.exit(0);
   } else if (options.version) {
     printBanner(options);

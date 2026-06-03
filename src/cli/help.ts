@@ -37,6 +37,7 @@ export function printHelp(): void {
     "  cve-lite advisories sync [options]",
     "  cve-lite install-skill",
     "  cve-lite config <set|unset|show> [key] [value]",
+    "  cve-lite overrides [path] [flags]",
     "",
     "Scan options:",
     "  --json                    Save scan results to a timestamped JSON file",
@@ -75,6 +76,27 @@ export function printHelp(): void {
     "",
     "  -v, --version             Show the CLI version",
     "  -h, --help                Show this help message"
+  ];
+  console.log(lines.join("\n"));
+}
+
+export function printOverridesHelp(): void {
+  printBanner();
+
+  const lines = [
+    "cve-lite overrides [path] [flags]",
+    "",
+    "Audit package.json overrides for hygiene problems (OA001..OA008).",
+    "",
+    "Flags:",
+    "  --json                  Emit findings as JSON",
+    "  --fix                   Apply RFC 6902 patches for findings with auto-fix",
+    "  --rule <id>             Only run a specific rule (OA001..OA008)",
+    "  --check-network         Enable OA007 registry drift check (opt-in network)",
+    "  --audit-log <path>      Stream NDJSON change-control to <path>",
+    "  --fail-on <severity>    Exit non-zero at or above this severity (default: critical)",
+    "  --debug                 Enable debug logging",
+    "  -h, --help              Show this help"
   ];
   console.log(lines.join("\n"));
 }
