@@ -94,6 +94,66 @@ export function parseArgs(argv: string[]): {
     throw new Error(`Unknown config subcommand: ${sub ?? "(none)"}. Use: ${ConfigAction.Set}, ${ConfigAction.Unset}, ${ConfigAction.Show}`);
   }
 
+  if (argv[0] === "overrides") {
+    let projectArg: string | undefined;
+    for (let i = 1; i < argv.length; i++) {
+      const arg = argv[i];
+      if (arg === "-h" || arg === "--help") {
+        options.help = true;
+        continue;
+      }
+      if (arg === "--json") {
+        options.json = true;
+        continue;
+      }
+      if (arg === "--fix") {
+        options.fix = true;
+        continue;
+      }
+      if (arg === "--check-network") {
+        options.checkNetwork = true;
+        continue;
+      }
+      if (arg === "--debug") {
+        options.debug = true;
+        continue;
+      }
+      if (arg === "--audit-log") {
+        options.auditLog = argv[++i];
+        continue;
+      }
+      if (arg.startsWith("--audit-log=")) {
+        options.auditLog = arg.slice("--audit-log=".length);
+        continue;
+      }
+      if (arg === "--rule") {
+        options.rule = argv[++i];
+        continue;
+      }
+      if (arg.startsWith("--rule=")) {
+        options.rule = arg.slice("--rule=".length);
+        continue;
+      }
+      if (arg === "--fail-on") {
+        options.failOn = argv[++i] ?? options.failOn;
+        continue;
+      }
+      if (arg.startsWith("--fail-on=")) {
+        options.failOn = arg.slice("--fail-on=".length);
+        continue;
+      }
+      if (arg.startsWith("-")) {
+        throw new Error(`Unknown option: ${arg}`);
+      }
+      if (!projectArg) {
+        projectArg = arg;
+        continue;
+      }
+      throw new Error(`Unexpected argument: ${arg}`);
+    }
+    return { command: "overrides", options, projectArg };
+  }
+
   let projectArg: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -244,6 +304,18 @@ export function parseArgs(argv: string[]): {
     }
     if (arg === "--cdx") {
       options.cdx = true;
+      continue;
+    }
+    if (arg === "--audit-log") {
+      options.auditLog = argv[++i];
+      continue;
+    }
+    if (arg.startsWith("--audit-log=")) {
+      options.auditLog = arg.slice("--audit-log=".length);
+      continue;
+    }
+    if (arg === "--check-overrides") {
+      options.checkOverrides = true;
       continue;
     }
     if (arg.startsWith("-")) {
