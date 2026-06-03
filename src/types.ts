@@ -153,7 +153,7 @@ export type Spinner = {
   stop: () => void;
 };
 
-export type CliCommand = "scan" | "advisories-sync" | "install-skill" | "config";
+export type CliCommand = "scan" | "advisories-sync" | "install-skill" | "config" | "overrides";
 
 export type ParsedOptions = {
   version?: boolean;
@@ -181,6 +181,14 @@ export type ParsedOptions = {
   sarif?: boolean;
   cdx?: boolean;
   caCert?: string;
+  /** --audit-log <path> - project-wide opt-in NDJSON change-control stream. */
+  auditLog?: string;
+  /** --check-overrides - run override hygiene checks as part of `scan` (off by default; spec keeps default scan CVE-only). */
+  checkOverrides?: boolean;
+  /** --check-network - gates OA007 registry calls inside `cve-lite overrides`. */
+  checkNetwork?: boolean;
+  /** --rule <id> - filter `overrides` to a single rule (OA001..OA008). */
+  rule?: string;
 };
 
 /**
