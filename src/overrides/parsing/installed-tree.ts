@@ -5,14 +5,14 @@ import { type InstalledManifest } from './node-modules.js';
 
 /**
  * Walk node_modules trees recursively to gather two indices:
- *   1. installedCopies      — name → all copies of that name anywhere in the tree
- *   2. parentDeclarations   — name → parents that declare it as a (opt|peer)Dependency
+ *   1. installedCopies      - name -> all copies of that name anywhere in the tree
+ *   2. parentDeclarations   - name -> parents that declare it as a (opt|peer)Dependency
  *
  * Both are populated in one pass to amortise the directory walk. The walk is
  * shallow-ish: it follows `node_modules/<a>/node_modules/<b>/node_modules/...`
  * but does not chase symlinks (avoids workspace-protocol cycles).
  *
- * Returns empty maps when `node_modules` does not exist — callers should fall
+ * Returns empty maps when `node_modules` does not exist - callers should fall
  * back to lockfile-only signals (and surface a skippedDetectors note).
  */
 export function walkInstalledTree(projectPath: string): {
