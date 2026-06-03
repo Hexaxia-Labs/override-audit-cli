@@ -1,10 +1,10 @@
 import { detect } from '../../../src/overrides/detectors/oa003-wrong-section.js';
-import type { OverrideContext, OverrideEntry } from '../../../src/overrides/context.js';
+import type { OverrideContext, OverrideEntry, PackageManager } from '../../../src/overrides/context.js';
 import { NULL_AUDIT_LOG } from '../../../src/audit-log/index.js';
 
 const noopLogger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as any;
 
-function ctxOf(pm: 'npm' | 'pnpm', entries: OverrideEntry[]): OverrideContext {
+function ctxOf(pm: PackageManager, entries: OverrideEntry[]): OverrideContext {
   return {
     projectPath: '/x',
     packageJson: {},
@@ -60,5 +60,76 @@ describe('OA003-WRONG-SECTION', () => {
   it('emits one finding per misplaced entry', () => {
     const findings = detect(ctxOf('npm', [pnpmEntry('a'), pnpmEntry('b')]));
     expect(findings).toHaveLength(2);
+  });
+
+  it('flags resolutions in an npm project', () => {
+    const ctx = ctxOf('npm', [{
+      key: 'lodash',
+      packageName: 'lodash',
+      value: '4.17.21',
+      path: ['resolutions', 'lodash'],
+      container: 'resolutions',
+    }]);
+    const findings = detect(ctx);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      ruleId: 'OA003',
+      package: { name: 'lodash' },
+    });
+    expect(findings[0].fix?.patch[0]).toMatchObject({
+      op: 'move',
+      from: '/resolutions/lodash',
+      path: '/overrides/lodash',
+    });
+  });
+
+  it('flags overrides in a yarn project', () => {
+    const ctx = ctxOf('yarn', [{
+      key: 'lodash',
+      packageName: 'lodash',
+      value: '4.17.21',
+      path: ['overrides', 'lodash'],
+      container: 'overrides',
+    }]);
+    const findings = detect(ctx);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].fix?.patch[0]).toMatchObject({
+      op: 'move',
+      from: '/overrides/lodash',
+      path: '/resolutions/lodash',
+    });
+  });
+
+  it('does NOT flag resolutions in a yarn project', () => {
+    const ctx = ctxOf('yarn', [{
+      key: 'lodash',
+      packageName: 'lodash',
+      value: '4.17.21',
+      path: ['resolutions', 'lodash'],
+      container: 'resolutions',
+    }]);
+    expect(detect(ctx)).toHaveLength(0);
+  });
+
+  it('does NOT flag overrides in a bun project (bun uses npm syntax)', () => {
+    const ctx = ctxOf('bun', [{
+      key: 'lodash',
+      packageName: 'lodash',
+      value: '4.17.21',
+      path: ['overrides', 'lodash'],
+      container: 'overrides',
+    }]);
+    expect(detect(ctx)).toHaveLength(0);
+  });
+
+  it('does not fire for unknown package manager', () => {
+    const ctx = ctxOf('unknown' as any, [{
+      key: 'lodash',
+      packageName: 'lodash',
+      value: '4.17.21',
+      path: ['resolutions', 'lodash'],
+      container: 'resolutions',
+    }]);
+    expect(detect(ctx)).toHaveLength(0);
   });
 });
