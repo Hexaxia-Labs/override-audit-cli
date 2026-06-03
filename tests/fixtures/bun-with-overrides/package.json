@@ -1,0 +1,11 @@
+{
+  "name": "bun-fixture",
+  "private": true,
+  "dependencies": {
+    "lodash": "^4.17.20"
+  },
+  "overrides": {
+    "lodash": "4.17.21",
+    "completely-unused-pkg": "1.0.0"
+  }
+}

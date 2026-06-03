@@ -1,0 +1,19 @@
+# yarn lockfile v1
+
+
+lodash@^4.17.20, lodash@4.17.21:
+  version "4.17.21"
+  resolved "https://registry.yarnpkg.com/lodash/-/lodash-4.17.21.tgz#679591c564c3bffaae3f6428ce6278536e9fbdb3"
+  integrity sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZbKchn2hSat0cudQXAsSBQ7OpBjwvWej2XsqeGA3WxvQ==
+
+axios@^1.0.0:
+  version "1.6.0"
+  resolved "https://registry.yarnpkg.com/axios/-/axios-1.6.0.tgz#f114f8f78e8c07aab9f23200dd3a18a0df8ecc2e"
+  integrity sha512-EZ1DjMnqI/xSVsPy+fe9+QK3qwAf4oXvGetVSDuqnx46Z+/czJcUfsVfKIqDmhXE08/B63o2FJWJvXsoFFQT7A==
+  dependencies:
+    follow-redirects "^1.15.0"
+
+follow-redirects@^1.15.0:
+  version "1.15.3"
+  resolved "https://registry.yarnpkg.com/follow-redirects/-/follow-redirects-1.15.3.tgz#fe2f3ef2690afce7633546cdc4fb3b59e8120eaB"
+  integrity sha512-1VzOtuEM8pC6LqLU6/pVIMw4qog5UIpaLo/yDc+ETQecWGS/15IpWmbATkAsiIM8pBNktQFCdue4Htjdu+DHVk==

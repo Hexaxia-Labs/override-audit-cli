@@ -1,0 +1,14 @@
+{
+  "lockfileVersion": 0,
+  "workspaces": {
+    "": {
+      "name": "bun-fixture",
+      "dependencies": {
+        "lodash": "^4.17.20",
+      },
+    },
+  },
+  "packages": {
+    "lodash": [ "lodash@4.17.21", "", {}, "" ],
+  },
+}
