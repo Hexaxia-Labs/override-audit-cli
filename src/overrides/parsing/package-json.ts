@@ -51,9 +51,10 @@ export function bareName(overrideKey: string): string {
 }
 
 /**
- * Extract all override entries from `overrides` (npm) and `pnpm.overrides`,
- * preserving nested-object values without flattening them. Each entry records
- * its container so detectors can reason about misplacement.
+ * Extract all override entries from `overrides` (npm/bun), `pnpm.overrides`,
+ * and `resolutions` (yarn), preserving nested-object values without flattening
+ * them. Each entry records its container so detectors can reason about
+ * misplacement.
  */
 export function extractOverrideEntries(pkgJson: Record<string, unknown>): OverrideEntry[] {
   const out: OverrideEntry[] = [];
@@ -80,6 +81,19 @@ export function extractOverrideEntries(pkgJson: Record<string, unknown>): Overri
         value,
         path: ['pnpm', 'overrides', key],
         container: 'pnpm.overrides',
+      });
+    }
+  }
+
+  const yarnResolutions = pkgJson.resolutions as Record<string, OverrideValue> | undefined;
+  if (yarnResolutions && typeof yarnResolutions === 'object') {
+    for (const [key, value] of Object.entries(yarnResolutions)) {
+      out.push({
+        key,
+        packageName: bareName(key),
+        value,
+        path: ['resolutions', key],
+        container: 'resolutions',
       });
     }
   }

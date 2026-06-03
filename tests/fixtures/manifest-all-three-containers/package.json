@@ -1,0 +1,7 @@
+{
+  "name": "all-three",
+  "private": true,
+  "overrides": { "postcss": "8.5.15" },
+  "pnpm": { "overrides": { "react": "18.0.0" } },
+  "resolutions": { "lodash": "4.17.21" }
+}

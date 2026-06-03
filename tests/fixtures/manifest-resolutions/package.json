@@ -1,0 +1,8 @@
+{
+  "name": "yarn-resolutions-fixture",
+  "private": true,
+  "resolutions": {
+    "lodash": "4.17.21",
+    "@scope/pkg": "^1.0.0"
+  }
+}

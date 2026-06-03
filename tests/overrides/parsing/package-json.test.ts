@@ -67,6 +67,38 @@ describe('extractOverrideEntries', () => {
     const r = readPackageJson(F('manifest-no-overrides'));
     expect(extractOverrideEntries(r.parsed)).toEqual([]);
   });
+
+  it('extracts yarn resolutions entries', () => {
+    const r = readPackageJson(F('manifest-resolutions'));
+    const entries = extractOverrideEntries(r.parsed);
+    expect(entries).toHaveLength(2);
+
+    const lodash = entries.find((e) => e.key === 'lodash');
+    expect(lodash).toMatchObject({
+      key: 'lodash',
+      packageName: 'lodash',
+      value: '4.17.21',
+      path: ['resolutions', 'lodash'],
+      container: 'resolutions',
+    });
+
+    const scoped = entries.find((e) => e.key === '@scope/pkg');
+    expect(scoped).toMatchObject({
+      key: '@scope/pkg',
+      packageName: '@scope/pkg',
+      value: '^1.0.0',
+      path: ['resolutions', '@scope/pkg'],
+      container: 'resolutions',
+    });
+  });
+
+  it('reads ALL THREE containers when all are present', () => {
+    const r = readPackageJson(F('manifest-all-three-containers'));
+    const entries = extractOverrideEntries(r.parsed);
+    expect(entries).toHaveLength(3);
+    const containers = entries.map((e) => e.container).sort();
+    expect(containers).toEqual(['overrides', 'pnpm.overrides', 'resolutions']);
+  });
 });
 
 describe('bareName', () => {
