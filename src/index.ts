@@ -61,6 +61,7 @@ import {
   FixExecutionResult,
   printFixModeSummary,
 } from "./utils/fix-runner.js";
+import { createAuditLog } from "./audit-log/index.js";
 
 let parsedArgs: ReturnType<typeof parseArgs> | null = null;
 try {
@@ -306,6 +307,49 @@ if (parsedArgs) {
           projectPath,
           debugLog,
         });
+      }
+    }
+
+    let overridesFixHookResult = null;
+    if (options.fix && fixResult) {
+      const { runOverridesFixHook } = await import("./cli/fix-overrides-hook.js");
+      const projectPathResolved = path.resolve(projectArg ?? ".");
+      const auditLogHandle = createAuditLog(options.auditLog ?? process.env.CVE_LITE_AUDIT_LOG);
+
+      // Collect CVE-touched targets from cve-lite's fix result.
+      const cveFixTargets = fixResult.applied.map((entry) => ({
+        name: entry.package,
+        version: entry.to,
+      }));
+
+      // Create a simple logger adapter if needed
+      const hookLogger = {
+        info: (msg: string) => debugLog("hook.info", { message: msg }),
+        warn: (msg: string) => debugLog("hook.warn", { message: msg }),
+        error: (msg: string) => debugLog("hook.error", { message: msg }),
+        debug: (msg: string) => debugLog("hook.debug", { message: msg }),
+      };
+
+      overridesFixHookResult = await runOverridesFixHook({
+        projectPath: projectPathResolved,
+        auditLog: auditLogHandle,
+        logger: hookLogger,
+        cveFixTargets,
+      });
+      auditLogHandle.close();
+
+      if (!overridesFixHookResult.verifyOk) {
+        debugLog("overrides-fix-hook verify failed", {
+          failures: overridesFixHookResult.verifyFailures,
+        });
+        console.log(
+          chalk.red(
+            `Overrides fix verify failed:\n${overridesFixHookResult.verifyFailures
+              .map((v) => `  ${v.ruleId} ${v.package}: ${v.reason}`)
+              .join("\n")}`
+          )
+        );
+        process.exit(2);
       }
     }
 
