@@ -66,7 +66,8 @@ export interface OverrideContext {
   lockfilePackageNames: Set<string>;
   /** name -> installed version (top-level node_modules only). */
   installedVersions: Map<string, string>;
-  /** name -> every installed copy in the tree (lazy; OA006/OA008 fill this). */
+  /** name -> every installed copy in the tree, populated eagerly by
+   *  walkInstalledTree when node_modules exists; consumed by OA006 and OA008. */
   installedCopies: Map<string, InstalledCopy[]>;
   /** name -> parents that declare it. */
   parentDeclarations: Map<string, ParentDeclaration[]>;
