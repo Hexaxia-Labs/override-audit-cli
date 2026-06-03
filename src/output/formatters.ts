@@ -296,3 +296,12 @@ export function sortFindingsForOutput(findings: Finding[]): Finding[] {
 export function countUniqueAdvisories(findings: Finding[]): number {
   return new Set(findings.flatMap(f => f.vulnerabilities.map(v => v.id))).size;
 }
+
+import type { OverrideFinding } from "../overrides/types.js";
+
+export function renderOverrideFindings(findings: ReadonlyArray<OverrideFinding>): string {
+  if (findings.length === 0) return "No override hygiene findings.";
+  return findings
+    .map((f) => `${f.severity.toUpperCase()} ${f.ruleId} ${f.package.name} - ${f.message}`)
+    .join("\n");
+}
