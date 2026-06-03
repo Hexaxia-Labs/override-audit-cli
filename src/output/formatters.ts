@@ -47,7 +47,7 @@ export function getRecommendedAction(finding: Finding): string {
   }
 
   // Prefer the registry-validated target over the raw advisory hint when
-  // available — they can disagree (the hint may not be published on npm or
+  // available - they can disagree (the hint may not be published on npm or
   // may itself be vulnerable), and the validated target is what the fix
   // command actually uses.
   const directTarget = finding.validatedFirstFixedVersion ?? finding.firstFixedVersion;
@@ -60,7 +60,7 @@ export function getRecommendedAction(finding: Finding): string {
   }
 
   if (finding.recommendedNpmTransitiveRemediation?.kind === "update-parent-within-range") {
-    return `${finding.recommendedNpmTransitiveRemediation.package} already permits ${finding.pkg.name}@${finding.recommendedNpmTransitiveRemediation.targetChildVersion} — run the lockfile refresh command to pick it up.`;
+    return `${finding.recommendedNpmTransitiveRemediation.package} already permits ${finding.pkg.name}@${finding.recommendedNpmTransitiveRemediation.targetChildVersion} - run the lockfile refresh command to pick it up.`;
   }
 
   if (
@@ -98,7 +98,7 @@ export function getRecommendedAction(finding: Finding): string {
 
   const parent = getPrimaryParent(finding);
   if (parent && directTarget) {
-    return `Upgrade ${parent} — no safe version was identified automatically. Check for a release that resolves ${finding.pkg.name} to ${directTarget}+.`;
+    return `Upgrade ${parent} - no safe version was identified automatically. Check for a release that resolves ${finding.pkg.name} to ${directTarget}+.`;
   }
   if (parent) {
     return `Review ${parent}; it currently pulls in vulnerable ${finding.pkg.name}.`;
@@ -106,7 +106,7 @@ export function getRecommendedAction(finding: Finding): string {
   // No parent identifiable: either dependencyPaths is empty, or the path is
   // a degenerate length-2 chain (project -> vulnerable, common when the
   // package is hoisted to top-level node_modules). The advice is the same
-  // either way — inspect the lockfile or run `<pm> ls` to find the parent.
+  // either way - inspect the lockfile or run `<pm> ls` to find the parent.
   if (directTarget) {
     return `No parent dependency was identified for ${finding.pkg.name} in the lockfile. Run \`npm ls ${finding.pkg.name}\` (or your package manager equivalent) to find which package pulls it in, then upgrade toward ${directTarget}+.`;
   }
@@ -198,7 +198,7 @@ export function summarizeNextAction(finding: Finding): string {
     return `No known fix exists for ${finding.pkg.name}. Consider replacing it with an actively maintained alternative.`;
   }
   if (finding.recommendedNpmTransitiveRemediation?.kind === "update-parent-within-range") {
-    return `Lockfile refresh — ${finding.recommendedNpmTransitiveRemediation.package} already permits a safe version.`;
+    return `Lockfile refresh - ${finding.recommendedNpmTransitiveRemediation.package} already permits a safe version.`;
   }
   if (
     finding.recommendedNpmTransitiveRemediation?.kind === "upgrade-parent-to-version" &&
@@ -211,7 +211,7 @@ export function summarizeNextAction(finding: Finding): string {
   }
   const parent = getPrimaryParent(finding);
   if (parent && directTarget) {
-    return `Upgrade ${parent} — no safe version identified. Find a release resolving ${finding.pkg.name} to ${directTarget}+.`;
+    return `Upgrade ${parent} - no safe version identified. Find a release resolving ${finding.pkg.name} to ${directTarget}+.`;
   }
   if (directTarget) {
     return `No parent identified in the lockfile. Run \`npm ls ${finding.pkg.name}\` to find the parent, then upgrade toward ${directTarget}+.`;
