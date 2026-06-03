@@ -39,8 +39,8 @@ export interface OverrideFix {
 }
 
 export interface OverrideFinding {
-  ruleId: import("./types.js").OverrideRuleId;
-  subRuleId?: import("./types.js").OverrideSubRuleId;
+  ruleId: OverrideRuleId;
+  subRuleId?: OverrideSubRuleId;
   severity: SeverityLabel;
   package: { name: string; version?: string };
   location: { file: string; jsonPath?: string; line?: number };
