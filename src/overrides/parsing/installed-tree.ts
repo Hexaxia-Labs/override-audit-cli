@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import type { InstalledCopy, ParentDeclaration } from '../context.js';
 import { type InstalledManifest } from './node-modules.js';
 
