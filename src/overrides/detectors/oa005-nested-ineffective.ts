@@ -3,6 +3,7 @@ import type { OverrideFinding } from "../types.js";
 import { jsonPointer } from "../parsing/json-pointer.js";
 import { readInstalledManifest, type InstalledManifest } from "../parsing/node-modules.js";
 import { satisfiesRange, isValidRange } from "../../utils/version.js";
+import { shellQuote } from "../../utils/string.js";
 
 const RULE_ID = "OA005" as const;
 
@@ -147,8 +148,4 @@ function classify(args: ClassifyArgs): OverrideFinding | null {
     `Nested override ${outerKey}.${innerKey} is valid and effective. A flat top-level "overrides": { "${innerKey}": "${innerValue}" } would apply across the whole tree.`,
     "suggest",
   );
-}
-
-function shellQuote(s: string): string {
-  return /[^A-Za-z0-9_@./:-]/.test(s) ? `'${s.replace(/'/g, "'\\''")}'` : s;
 }

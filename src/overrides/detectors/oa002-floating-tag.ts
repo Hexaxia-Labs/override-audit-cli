@@ -2,6 +2,7 @@ import type { OverrideContext } from "../context.js";
 import type { OverrideFinding } from "../types.js";
 import { jsonPointer } from "../parsing/json-pointer.js";
 import { isValidRange } from "../../utils/version.js";
+import { shellQuote } from "../../utils/string.js";
 
 const RULE_ID = "OA002" as const;
 const FLOATING = new Set(['latest', 'next', '*', 'x', '']);
@@ -43,8 +44,4 @@ export function detect(ctx: OverrideContext): OverrideFinding[] {
     findings.push(finding);
   }
   return findings;
-}
-
-function shellQuote(s: string): string {
-  return /[^A-Za-z0-9_@./:-]/.test(s) ? `'${s.replace(/'/g, "'\\''")}'` : s;
 }

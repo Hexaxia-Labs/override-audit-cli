@@ -1,6 +1,7 @@
 import type { OverrideContext } from "../context.js";
 import type { OverrideFinding } from "../types.js";
 import { jsonPointer } from "../parsing/json-pointer.js";
+import { shellQuote } from "../../utils/string.js";
 
 const RULE_ID = "OA001" as const;
 
@@ -31,8 +32,4 @@ export function detect(ctx: OverrideContext): OverrideFinding[] {
     });
   }
   return findings;
-}
-
-function shellQuote(s: string): string {
-  return /[^A-Za-z0-9_@./:-]/.test(s) ? `'${s.replace(/'/g, "'\\''")}'` : s;
 }

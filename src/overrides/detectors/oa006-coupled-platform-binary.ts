@@ -3,6 +3,7 @@ import type { OverrideFinding } from '../types.js';
 import { jsonPointer } from '../parsing/json-pointer.js';
 import { compareVersions, looksLikeVersion } from '../../utils/version.js';
 import { looksLikePlatformBinary } from './platform-binary.js';
+import { shellQuote } from '../../utils/string.js';
 
 const RULE_ID = 'OA006' as const;
 
@@ -140,8 +141,4 @@ function buildParentOverridePath(entry: OverrideEntry, parentName: string): stri
 /** Find an existing override entry by package name across all containers. */
 function findExistingOverride(ctx: OverrideContext, packageName: string): OverrideEntry | undefined {
   return ctx.overrideEntries.find(e => e.packageName === packageName);
-}
-
-function shellQuote(s: string): string {
-  return /[^A-Za-z0-9_@./:-]/.test(s) ? `'${s.replace(/'/g, "'\\''")}'` : s;
 }
