@@ -29,5 +29,8 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Sync advisory database (required by e2e tests using --offline)
+        run: node dist/index.js advisories sync
+
       - name: Test
         run: npm test
