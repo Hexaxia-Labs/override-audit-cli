@@ -62,6 +62,8 @@ import {
   printFixModeSummary,
 } from "./utils/fix-runner.js";
 import { createAuditLog } from "./audit-log/index.js";
+import { audit, buildOverrideContext } from "./overrides/index.js";
+import type { OverrideFinding } from "./overrides/types.js";
 
 let parsedArgs: ReturnType<typeof parseArgs> | null = null;
 try {
@@ -94,6 +96,7 @@ if (parsedArgs) {
   const debugSession = createDebugLogger(!!options.debug);
   const debugLog = debugSession.log;
   const scanStartedAt = Date.now();
+  const auditLogHandle = createAuditLog(options.auditLog ?? process.env.CVE_LITE_AUDIT_LOG);
 
   async function main() {
     printBanner(options);
@@ -253,6 +256,24 @@ if (parsedArgs) {
       source: scanInput.source,
     });
 
+    // Emit scan.started event after loading packages
+    const scanStartTime = Date.now();
+    auditLogHandle.emit({
+      ts: new Date().toISOString(),
+      type: "scan.started",
+      schemaVersion: 1,
+      projectPath,
+      mode: scanInput.mode,
+      source: scanInput.source,
+      flags: {
+        fix: options.fix === true,
+        json: options.json === true,
+        prodOnly: options.prodOnly === true,
+        offline: options.offline === true,
+        checkOverrides: options.checkOverrides === true,
+      },
+    });
+
     logInfo(
       `Parsed ${packages.length} ${pluralize(packages.length, "package")} from ${scanInput.source}${
         scanInput.filePath ? ` (${path.relative(projectPath, scanInput.filePath) || path.basename(scanInput.filePath)})` : ""
@@ -283,6 +304,23 @@ if (parsedArgs) {
     });
     const findingsBeforeFix = scanState.sorted.length;
     let fixResult: FixExecutionResult | null = null;
+
+    // Collect override findings if --check-overrides is set
+    let overrideFindings: OverrideFinding[] = [];
+    if (options.checkOverrides) {
+      const overrideCtx = buildOverrideContext(projectPath, {
+        auditLog: auditLogHandle,
+        logger: {
+          info: (msg: string) => debugLog("oa.info", { message: msg }),
+          warn: (msg: string) => debugLog("oa.warn", { message: msg }),
+          error: (msg: string) => debugLog("oa.error", { message: msg }),
+          debug: (msg: string) => debugLog("oa.debug", { message: msg }),
+        },
+        checkNetwork: !!options.checkNetwork,
+      });
+      const auditResult = await audit(overrideCtx, { checkNetwork: !!options.checkNetwork });
+      overrideFindings = auditResult.findings;
+    }
 
     if (options.fix) {
       fixResult = await applyFixesIfRequested({
@@ -372,6 +410,7 @@ if (parsedArgs) {
         coverage: scanState.coverage,
         minSeverity: scanState.minSeverity,
         tableFindings: scanState.tableFindings,
+        overrideFindings,
       }, scanInput, projectPath);
 
       if (!(options.json || options.sarif || options.cdx) || options.verbose) {
@@ -413,6 +452,7 @@ if (parsedArgs) {
         suggestedFixCommands: scanState.suggestedFixCommands,
         notes: [...scanInput.notes, ...scanState.coverage],
         warnings: scanInput.warnings,
+        overrideFindings,
       });
       const { reportPath } = await writeHtmlReport({
         outputDir,
@@ -430,7 +470,20 @@ if (parsedArgs) {
 
     const failLevel = normalizeSeverity(options.failOn);
     const shouldFail = scanState.sorted.some(f => severityOrder[f.severity] >= severityOrder[failLevel]);
-    process.exit(shouldFail ? 1 : 0);
+    const exitCode = shouldFail ? 1 : 0;
+
+    // Emit scan.finished event and close audit-log
+    auditLogHandle.emit({
+      ts: new Date().toISOString(),
+      type: "scan.finished",
+      schemaVersion: 1,
+      durationMs: Date.now() - scanStartTime,
+      findingsCount: scanState.sorted.length + overrideFindings.length,
+      exitCode,
+    });
+    auditLogHandle.close();
+
+    process.exit(exitCode);
     return;
   }
 
@@ -440,6 +493,18 @@ if (parsedArgs) {
     if (options.debug && error instanceof Error && error.stack) {
       debugLog("Unhandled error", { message: error.message, stack: error.stack });
     }
+
+    // Emit error event to audit-log
+    auditLogHandle.emit({
+      ts: new Date().toISOString(),
+      type: "error",
+      schemaVersion: 1,
+      phase: "scan",
+      message: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    auditLogHandle.close();
+
     if (isSslCertificateError(error)) {
       const [hint, ...rest] = sslCertificateErrorHint();
       console.error(chalk.yellow(hint));
