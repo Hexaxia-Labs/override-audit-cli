@@ -291,6 +291,15 @@ if (parsedArgs) {
     if (packages.length === 0) {
       debugLog("Scan skipped", { reason: "no packages found", projectPath });
       logWarn(buildNoPackagesMessage(projectPath), options);
+      auditLogHandle.emit({
+        ts: new Date().toISOString(),
+        type: "scan.finished",
+        schemaVersion: 1,
+        durationMs: Date.now() - scanStartTime,
+        findingsCount: 0,
+        exitCode: 0,
+      });
+      auditLogHandle.close();
       process.exit(0);
       return;
     }
@@ -351,6 +360,15 @@ if (parsedArgs) {
         if (packages.length === 0) {
           debugLog("Scan skipped", { reason: "no packages found after fix rescan", projectPath });
           logWarn(buildNoPackagesMessage(projectPath), options);
+          auditLogHandle.emit({
+            ts: new Date().toISOString(),
+            type: "scan.finished",
+            schemaVersion: 1,
+            durationMs: Date.now() - scanStartTime,
+            findingsCount: 0,
+            exitCode: 0,
+          });
+          auditLogHandle.close();
           process.exit(0);
           return;
         }
