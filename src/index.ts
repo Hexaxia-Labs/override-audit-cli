@@ -408,6 +408,21 @@ if (parsedArgs) {
       }
     }
 
+    // Emit cve.fix.applied for each target in the fix plan
+    if (scanState.suggestedFixCommands?.targets) {
+      for (const target of scanState.suggestedFixCommands.targets) {
+        auditLogHandle.emit({
+          ts: new Date().toISOString(),
+          type: "cve.fix.applied",
+          schemaVersion: 1,
+          package: target.package,
+          fromVersion: target.currentVersion ?? "unknown",
+          toVersion: target.targetVersion,
+          mechanism: target.kind,
+        });
+      }
+    }
+
     if (options.fix) {
       printFixModeSummary({
         fixResult,
