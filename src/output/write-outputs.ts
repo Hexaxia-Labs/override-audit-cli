@@ -3,10 +3,12 @@ import path from "node:path";
 import { chalk } from "../utils/chalk.js";
 import type { ParsedOptions, ScanInput, Finding, PackageRef } from "../types.js";
 import type { SuggestedFixCommandPlan } from "../remediation/fix-commands.js";
+import type { OverrideFinding } from "../overrides/types.js";
 import type { ProjectMeta } from "./cyclonedx.js";
 import { serializeFinding } from "./formatters.js";
 import { writeSarifReport, deriveLockfileUri } from "./sarif.js";
 import { writeCycloneDxReport } from "./cyclonedx.js";
+import { overrideFindingsToJson } from "./override-findings-json.js";
 
 export type ScanState = {
   sorted: Finding[];
@@ -33,9 +35,13 @@ function readProjectMeta(projectPath: string): ProjectMeta {
   }
 }
 
+export interface WriteOutputsInput extends ScanState {
+  overrideFindings?: ReadonlyArray<OverrideFinding>;
+}
+
 export async function writeOutputs(
   options: ParsedOptions,
-  scanState: ScanState,
+  scanState: WriteOutputsInput,
   scanInput: ScanInput,
   projectPath: string,
 ): Promise<void> {
@@ -43,7 +49,7 @@ export async function writeOutputs(
     const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     const jsonFilename = `cve-lite-scan-${ts}.json`;
     const jsonOutputPath = path.join(process.cwd(), jsonFilename);
-    fs.writeFileSync(jsonOutputPath, JSON.stringify({
+    const payload = {
       projectPath,
       mode: scanInput.mode,
       source: scanInput.source,
@@ -54,7 +60,10 @@ export async function writeOutputs(
       warnings: scanInput.warnings,
       skippedDependencies: scanInput.skippedDependencies,
       findings: scanState.sorted.map(finding => serializeFinding(finding, scanState.suggestedFixCommands)),
-    }, null, 2));
+    };
+    const overridePayload = overrideFindingsToJson(scanState.overrideFindings ?? []);
+    const combined = { ...payload, ...overridePayload };
+    fs.writeFileSync(jsonOutputPath, JSON.stringify(combined, null, 2));
     console.log(`${chalk.gray("JSON saved to")} ${chalk.cyan(jsonFilename)}`);
   }
 
