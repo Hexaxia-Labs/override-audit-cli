@@ -69,7 +69,7 @@ export async function writeOutputs(
 
   if (options.sarif) {
     const lockfileUri = deriveLockfileUri(scanInput);
-    const sarifFilename = writeSarifReport(scanState.sorted, lockfileUri, scanState.suggestedFixCommands);
+    const sarifFilename = writeSarifReport(scanState.sorted, lockfileUri, scanState.suggestedFixCommands, scanState.overrideFindings);
     console.log(`${chalk.gray("SARIF report written to")} ${chalk.cyan(sarifFilename)}`);
   }
 

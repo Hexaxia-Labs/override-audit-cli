@@ -2,9 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Finding, ScanSource } from "../types.js";
 import type { SuggestedFixCommandPlan } from "../remediation/fix-commands.js";
+import type { OverrideFinding } from "../overrides/types.js";
 import { getRecommendedAction } from "./formatters.js";
 import { getCliVersion } from "../utils/version-info.js";
 import { severityToSarifLevel } from "../utils/severity.js";
+import { buildOverrideSarifComponent, buildOverrideSarifResults } from "./override-findings-sarif.js";
 
 type SarifLog = {
   $schema: string;
@@ -13,7 +15,7 @@ type SarifLog = {
 };
 
 type SarifRun = {
-  tool: { driver: SarifDriver };
+  tool: { driver: SarifDriver; extensions?: unknown[] };
   results: SarifResult[];
   artifacts: SarifArtifact[];
 };
@@ -75,6 +77,7 @@ export function buildSarifOutput(
   lockfileUri: string,
   version: string,
   _plan: SuggestedFixCommandPlan | null,
+  overrideFindings?: ReadonlyArray<OverrideFinding>,
 ): SarifLog {
   const ruleMap = new Map<string, SarifRule>();
   const results: SarifResult[] = [];
@@ -118,6 +121,15 @@ export function buildSarifOutput(
     }
   }
 
+  const extensions = overrideFindings && overrideFindings.length > 0
+    ? [buildOverrideSarifComponent()]
+    : undefined;
+
+  const allResults = [
+    ...results,
+    ...(overrideFindings ? (buildOverrideSarifResults(overrideFindings) as SarifResult[]) : []),
+  ];
+
   return {
     $schema: "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
     version: "2.1.0",
@@ -130,8 +142,9 @@ export function buildSarifOutput(
             informationUri: "https://owasp.org/cve-lite-cli/",
             rules: Array.from(ruleMap.values()),
           },
+          ...(extensions ? { extensions } : {}),
         },
-        results,
+        results: allResults,
         artifacts: [
           { location: { uri: lockfileUri, uriBaseId: "%SRCROOT%" } },
         ],
@@ -144,11 +157,12 @@ export function writeSarifReport(
   findings: Finding[],
   lockfileUri: string,
   plan: SuggestedFixCommandPlan | null,
+  overrideFindings?: ReadonlyArray<OverrideFinding>,
 ): string {
   const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const filename = `cve-lite-scan-${ts}.sarif`;
   const outputPath = path.join(process.cwd(), filename);
-  const sarif = buildSarifOutput(findings, lockfileUri, getCliVersion(), plan);
+  const sarif = buildSarifOutput(findings, lockfileUri, getCliVersion(), plan, overrideFindings);
   fs.writeFileSync(outputPath, JSON.stringify(sarif, null, 2));
   return filename;
 }
