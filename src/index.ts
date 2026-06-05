@@ -322,6 +322,19 @@ if (parsedArgs) {
       overrideFindings = auditResult.findings;
     }
 
+    // Emit cve.detected for each CVE finding
+    for (const f of scanState.sorted) {
+      auditLogHandle.emit({
+        ts: new Date().toISOString(),
+        type: "cve.detected",
+        schemaVersion: 1,
+        package: { name: f.pkg.name, version: f.pkg.version },
+        severity: f.severity,
+        cveAliases: f.cveAliases,
+        vulnerabilityIds: f.vulnerabilities.map((v) => v.id),
+      });
+    }
+
     if (options.fix) {
       fixResult = await applyFixesIfRequested({
         plan: scanState.suggestedFixCommands,
