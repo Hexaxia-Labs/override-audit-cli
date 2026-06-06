@@ -72,14 +72,15 @@ function classify(args: ClassifyArgs): OverrideFinding | null {
     location: { file: "package.json", jsonPath: jsonPointer(entryPath) },
     message,
     details,
-    fix: {
-      type: "rfc6902",
-      patch:
-        action === "remove"
-          ? [{ op: "remove", path: jsonPointer(entryPath) }]
-          : [],
-      runnableCommand: `cve-lite overrides --fix --rule OA005 --target ${shellQuote(outerKey)}`,
-    },
+    ...(action === "remove"
+      ? {
+          fix: {
+            type: "rfc6902" as const,
+            patch: [{ op: "remove", path: jsonPointer(entryPath) }],
+            runnableCommand: `cve-lite overrides --fix --rule OA005 --target ${shellQuote(outerKey)}`,
+          },
+        }
+      : {}),
     references: [
       "https://github.com/OWASP/cve-lite-cli/blob/main/docs/rules/OA005.md",
     ],

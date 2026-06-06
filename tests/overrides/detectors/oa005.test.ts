@@ -98,6 +98,7 @@ describe('OA005-NESTED-INEFFECTIVE', () => {
       subRuleId: 'OA005.d',
       severity: 'medium',
     });
+    expect(findings[0]!.fix).toBeUndefined();
   });
 
   // OA005.e - suspect (valid + effective, just stylistic)
@@ -117,6 +118,7 @@ describe('OA005-NESTED-INEFFECTIVE', () => {
       subRuleId: 'OA005.e',
       severity: 'low',
     });
+    expect(findings[0]!.fix).toBeUndefined();
   });
 
   it('does not fire on flat string overrides', () => {
