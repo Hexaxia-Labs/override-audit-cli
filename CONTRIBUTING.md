@@ -32,6 +32,39 @@ All contributions to this project are voluntary and unpaid. By opening a pull re
 
 Use the [bug report template](https://github.com/OWASP/cve-lite-cli/issues/new?template=bug_report.md). Include your Node.js version, package manager, and the full error output.
 
+## Override hygiene subsystem (`src/overrides/`)
+
+The override hygiene subsystem audits `overrides` / `pnpm.overrides` / `resolutions` declarations against the resolved dependency tree. It is a parallel surface to CVE scanning: CVE Lite remediates vulnerabilities by upgrading along the dependency graph, while override-audit keeps the overrides a project already has healthy. The hook never creates new overrides.
+
+### Pipeline
+
+```
+buildOverrideContext(projectPath)   reads package.json + lockfile + node_modules ONCE
+        -> OverrideContext
+detectors/oa00N-*.ts                each returns OverrideFinding[]
+        -> applyComposite()         dedup (OA005 > OA001) and escalation (OA006)
+        -> audit()                  emits oa.detected per finding
+        -> applyFix()               RFC 6902 patches for findings with an auto-fix
+        -> verify()                 re-runs OA001 + OA008 on just-patched targets
+```
+
+`audit()` and `verify()` are the public entry points in `src/overrides/api.ts`. `verify()` is the post-fix check that closes the loop: after a fix is applied, it confirms the override target is actually present in the resolved tree (OA001) and that no vulnerable copy is still materialized on disk (OA008). A failed verify exits the CLI with code `2`.
+
+### Adding a new OA rule
+
+1. Pick the next free rule ID (OA009+) and write `docs/rules/OA009.md`. The detector's `references:` URL must point at that path (`https://github.com/OWASP/cve-lite-cli/blob/main/docs/rules/OA009.md`).
+2. Create `src/overrides/detectors/oa009-short-name.ts` exporting a `detect(ctx): OverrideFinding[]` function matching the existing detectors.
+3. Register it in `src/overrides/detectors/index.ts` (`ALL_DETECTORS`, and `VERIFY_DETECTORS` only if it belongs in the post-fix check).
+4. Add fixture-driven unit tests under `tests/overrides/detectors/`.
+5. If the rule has an auto-fix, return a `fix.patch` (RFC 6902 array of `remove` / `replace` / `move` / `add` ops). Suggest-only findings must emit `fix: undefined`, not an empty patch, so the fixer correctly skips them.
+6. Add a sanity assertion under `tests/sanity/` locking in the rule's count on a real dogfood project.
+
+### Testing convention
+
+- Unit tests: `tests/overrides/detectors/<rule>.test.ts`
+- Sanity tests: `tests/sanity/plan-N-*.test.ts`, one per change, asserting the dogfood matrix is unchanged
+- The audit-log reference doc is `docs/audit-log.md`; the per-rule reference docs are `docs/rules/OA001.md` ... `OA008.md`.
+
 ## Questions
 
 Open a [GitHub Discussion](https://github.com/OWASP/cve-lite-cli/discussions) or reach out via the [OWASP Slack](https://owasp.org/slack/invite) in the `#project-cve-lite-cli` channel.
