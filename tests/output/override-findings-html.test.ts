@@ -24,8 +24,19 @@ describe("renderOverrideFindingsHtml", () => {
   });
 
   it("escapes HTML in message", () => {
-    const html = renderOverrideFindingsHtml([f({ message: "<script>" })]);
-    expect(html).not.toMatch(/<script>/);
-    expect(html).toMatch(/&lt;script&gt;/);
+    const html = renderOverrideFindingsHtml([f({ message: "<script>alert(1)</script>" })]);
+    // Use string containment, not a regex, so the assertion does not look like an
+    // HTML-filtering regexp to scanners. The escaper works at the character level,
+    // so verify the raw delimiters are gone and the entity form is present.
+    expect(html).not.toContain("<script>");
+    expect(html).not.toContain("</script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+
+  it("escapes upper-case and mixed-case tags too", () => {
+    const html = renderOverrideFindingsHtml([f({ message: "<SCRIPT>X</ScRiPt>" })]);
+    expect(html).not.toContain("<SCRIPT>");
+    expect(html).not.toContain("</ScRiPt>");
+    expect(html).toContain("&lt;SCRIPT&gt;");
   });
 });
