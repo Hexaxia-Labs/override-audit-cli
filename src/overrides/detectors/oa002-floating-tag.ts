@@ -14,7 +14,7 @@ export function detect(ctx: OverrideContext): OverrideFinding[] {
   for (const entry of ctx.overrideEntries) {
     if (typeof entry.value !== 'string') continue;  // OA005 handles nested objects
     const v = entry.value.trim();
-    if (v.startsWith('workspace:') || v.startsWith('file:') || v.startsWith('link:')) continue;
+    if (v.startsWith('workspace:') || v.startsWith('file:') || v.startsWith('link:') || v.startsWith('npm:')) continue;
 
     const isFloating = FLOATING.has(v.toLowerCase());
     const isInvalidRange = !isFloating && !isValidRange(v);

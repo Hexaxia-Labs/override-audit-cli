@@ -46,6 +46,14 @@ describe('OA002-FLOATING-TAG', () => {
     expect(detect(ctxOf([e('local', 'link:../local')]))).toEqual([]);
   });
 
+  it('skips npm: protocol aliases', () => {
+    const entries = [
+      e('lodash', 'npm:lodash@4.17.21'),
+    ];
+    const installed = [['lodash', '4.17.21']];
+    expect(detect(ctxOf(entries, installed))).toEqual([]);
+  });
+
   it('skips nested-object override values (OA005 handles those)', () => {
     const nested: OverrideEntry = {
       key: 'a', packageName: 'a', value: { b: 'latest' },
