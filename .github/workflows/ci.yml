@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Test hygiene gate (no Mocha-isms, no focused tests)
+        run: npm run lint:tests
+
       - name: Build
         run: npm run build
 

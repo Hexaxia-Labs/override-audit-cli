@@ -10,6 +10,8 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/index.ts .",
     "start": "node dist/index.js .",
+    "lint:tests": "node scripts/check-test-hygiene.mjs",
+    "pretest": "node scripts/check-test-hygiene.mjs",
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --passWithNoTests",
     "test:watch": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --watch --passWithNoTests"
   },
