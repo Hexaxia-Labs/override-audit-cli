@@ -216,7 +216,8 @@ describe("Plan 5: Output and emission stable", () => {
       const storyookPath = join(cveRefPath, "examples", "storybook");
 
       if (!existsSync(ghostPath) || !existsSync(prismaPath) || !existsSync(storyookPath)) {
-        this.skip();
+        console.log("skip: cve-lite-ref/examples fixtures not present");
+        return;
       }
 
       const log = new MemoryAuditLog();
