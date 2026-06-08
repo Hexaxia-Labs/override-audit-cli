@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { OverrideContext, PackageManager, SkippedDetector } from "./context.js";
+import type { OverrideContext, PackageManager, SkippedDetector, Logger } from "./context.js";
 import type { AuditLogHandle } from "../audit-log/index.js";
 import { extractOverrideEntries } from "./parsing/package-json.js";
 import { walkInstalledTree } from "./parsing/installed-tree.js";
@@ -8,6 +8,11 @@ import { loadFromPackageLock } from "../parsers/package-lock.js";
 import { loadFromPnpmLock } from "../parsers/pnpm-lock.js";
 import { loadFromYarnLock } from "../parsers/yarn-lock.js";
 import { loadFromBunLock } from "../parsers/bun-lock.js";
+
+type LockfileReadResult =
+  | { kind: "ok"; names: Set<string> }
+  | { kind: "absent" }
+  | { kind: "error"; message: string };
 
 export interface BuildOptions {
   auditLog: AuditLogHandle;
@@ -29,12 +34,18 @@ export function buildOverrideContext(
   const overrideEntries = extractOverrideEntries(parsed);
   const packageManager = detectPackageManager(projectPath);
 
-  const lockfilePackageNames = readLockfileNames(projectPath, packageManager);
+  const readResult = readLockfileNames(projectPath, packageManager);
+  const lockfilePackageNames = readResult.kind === "ok" ? readResult.names : new Set<string>();
   const nodeModulesExists = existsSync(join(projectPath, "node_modules"));
 
   const skipped: SkippedDetector[] = [];
   if (lockfilePackageNames.size === 0 && overrideEntries.length > 0) {
-    skipped.push({ ruleId: "OA001", reason: "lockfile missing or empty" });
+    if (readResult.kind === "error") {
+      skipped.push({ ruleId: "OA001", reason: `lockfile failed to parse: ${readResult.message}` });
+      opts.logger.warn(`Lockfile parse error: ${readResult.message}`);
+    } else {
+      skipped.push({ ruleId: "OA001", reason: "lockfile missing or empty" });
+    }
   }
   if (!nodeModulesExists && overrideEntries.length > 0) {
     skipped.push({ ruleId: "OA004", reason: "node_modules missing" });
@@ -89,36 +100,52 @@ function detectPackageManager(projectPath: string): PackageManager {
   return "unknown";
 }
 
-function readLockfileNames(projectPath: string, pm: PackageManager): Set<string> {
-  try {
-    if (pm === "npm") {
-      const lockPath = join(projectPath, "package-lock.json");
-      if (!existsSync(lockPath)) return new Set();
+function readLockfileNames(projectPath: string, pm: PackageManager): LockfileReadResult {
+  if (pm === "npm") {
+    const lockPath = join(projectPath, "package-lock.json");
+    if (!existsSync(lockPath)) return { kind: "absent" };
+    try {
       const refs = loadFromPackageLock(lockPath, false);
-      return new Set(refs.map((r) => r.name));
+      return { kind: "ok", names: new Set(refs.map((r) => r.name)) };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { kind: "error", message: `package-lock.json: ${message}` };
     }
-    if (pm === "pnpm") {
-      const lockPath = join(projectPath, "pnpm-lock.yaml");
-      if (!existsSync(lockPath)) return new Set();
-      const refs = loadFromPnpmLock(lockPath, false);
-      return new Set(refs.map((r) => r.name));
-    }
-    if (pm === "yarn") {
-      const lockPath = join(projectPath, "yarn.lock");
-      if (!existsSync(lockPath)) return new Set();
-      const refs = loadFromYarnLock(lockPath);
-      return new Set(refs.map((r) => r.name));
-    }
-    if (pm === "bun") {
-      const lockPath = join(projectPath, "bun.lock");
-      if (!existsSync(lockPath)) return new Set();
-      const refs = loadFromBunLock(lockPath, false);
-      return new Set(refs.map((r) => r.name));
-    }
-    return new Set();
-  } catch {
-    return new Set();
   }
+  if (pm === "pnpm") {
+    const lockPath = join(projectPath, "pnpm-lock.yaml");
+    if (!existsSync(lockPath)) return { kind: "absent" };
+    try {
+      const refs = loadFromPnpmLock(lockPath, false);
+      return { kind: "ok", names: new Set(refs.map((r) => r.name)) };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { kind: "error", message: `pnpm-lock.yaml: ${message}` };
+    }
+  }
+  if (pm === "yarn") {
+    const lockPath = join(projectPath, "yarn.lock");
+    if (!existsSync(lockPath)) return { kind: "absent" };
+    try {
+      const refs = loadFromYarnLock(lockPath);
+      return { kind: "ok", names: new Set(refs.map((r) => r.name)) };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { kind: "error", message: `yarn.lock: ${message}` };
+    }
+  }
+  if (pm === "bun") {
+    const lockPath = join(projectPath, "bun.lock");
+    if (!existsSync(lockPath)) return { kind: "absent" };
+    try {
+      const refs = loadFromBunLock(lockPath, false);
+      return { kind: "ok", names: new Set(refs.map((r) => r.name)) };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { kind: "error", message: `bun.lock: ${message}` };
+    }
+  }
+  return { kind: "absent" };
 }
 
 function readInstalledVersionTopLevel(projectPath: string, name: string): string | null {
