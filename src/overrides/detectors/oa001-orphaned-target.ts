@@ -10,6 +10,10 @@ export function detect(ctx: OverrideContext): OverrideFinding[] {
 
   const findings: OverrideFinding[] = [];
   for (const entry of ctx.overrideEntries) {
+    // pnpm selective `parent>child` keys are nested overrides, not simple
+    // orphan candidates. OA005 owns the "is this nested override sensible"
+    // question; OA001 stays out of pnpm nested syntax (see #14/#15).
+    if (entry.parentScope !== undefined) continue;
     if (ctx.lockfilePackageNames.has(entry.packageName)) continue;
     findings.push({
       ruleId: RULE_ID,

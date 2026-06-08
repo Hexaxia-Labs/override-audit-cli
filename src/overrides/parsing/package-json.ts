@@ -31,14 +31,12 @@ export function readPackageJson(projectPath: string): PackageJsonReadResult {
 }
 
 /**
- * Strip pnpm's optional `@<specifier>` suffix from an override key.
+ * Strip pnpm's optional `@<specifier>` suffix from an override key segment.
  * Handles both `pkg@>=1.0.0` and `@scope/pkg@>=1.0.0`.
  *
- * For pnpm "nested" override keys (`parent>child[@spec]`) we deliberately
- * do NOT split on `>`. The composite literal stays as the bare name so that
- * OA001 can lockfile-test it. This matches preserved override-audit's
- * behavior; the semantic question "is the override scope alive inside the
- * parent" needs a dep-graph walk that lives in a future detector.
+ * NOTE: this operates on a single segment and does NOT split pnpm selective
+ * `parent>child` keys. Splitting on `>` is handled by `parseOverrideKey`,
+ * which feeds each side through `bareName` separately.
  */
 export function bareName(overrideKey: string): string {
   if (overrideKey.startsWith('@')) {
@@ -48,6 +46,52 @@ export function bareName(overrideKey: string): string {
   }
   const at = overrideKey.indexOf('@');
   return at === -1 ? overrideKey : overrideKey.slice(0, at);
+}
+
+/**
+ * Index of the `@` that introduces a version specifier on a single selector,
+ * or -1 if there is none. For scoped names the leading `@` (index 0) is the
+ * scope, not a specifier, so we look past it.
+ */
+function specifierAt(selector: string): number {
+  if (selector.startsWith('@')) {
+    return selector.indexOf('@', 1);
+  }
+  return selector.indexOf('@');
+}
+
+/**
+ * Resolve an override key into its real target package name and (for pnpm
+ * selective `parent>child` keys) the parent scope.
+ *
+ * - Plain key (`postcss`, `@babel/runtime@<7.26.10`, `debug@>=4.0.0 <4.3.1`):
+ *   no SELECTIVE `>`, so `packageName = bareName(key)` and `parentScope`
+ *   stays undefined. Unchanged from the historical behavior. Note that a `>`
+ *   inside a semver range (`@>=4.0.0`) is NOT a selective separator: it always
+ *   follows the specifier `@`, so we only treat a `>` that appears BEFORE the
+ *   specifier `@` as the pnpm `parent>child` separator.
+ * - pnpm selective key (`parent>child`, `parent>@scope/child`): split on that
+ *   FIRST selective `>`; the child (after `>`, with any `@spec` stripped) is
+ *   the real target, the parent (also bareName'd) is the scope.
+ */
+export function parseOverrideKey(overrideKey: string): {
+  packageName: string;
+  parentScope?: string;
+} {
+  const gt = overrideKey.indexOf('>');
+  const spec = specifierAt(overrideKey);
+  // A `>` is the selective separator only if it precedes any version
+  // specifier `@` (otherwise it belongs to a semver comparator like `@>=`).
+  const isSelective = gt !== -1 && (spec === -1 || gt < spec);
+  if (!isSelective) {
+    return { packageName: bareName(overrideKey) };
+  }
+  const parent = overrideKey.slice(0, gt);
+  const childRaw = overrideKey.slice(gt + 1);
+  return {
+    packageName: bareName(childRaw),
+    parentScope: bareName(parent),
+  };
 }
 
 /**
@@ -62,9 +106,11 @@ export function extractOverrideEntries(pkgJson: Record<string, unknown>): Overri
   const npmOverrides = pkgJson.overrides as Record<string, OverrideValue> | undefined;
   if (npmOverrides && typeof npmOverrides === 'object') {
     for (const [key, value] of Object.entries(npmOverrides)) {
+      const { packageName, parentScope } = parseOverrideKey(key);
       out.push({
         key,
-        packageName: bareName(key),
+        packageName,
+        ...(parentScope !== undefined ? { parentScope } : {}),
         value,
         path: ['overrides', key],
         container: 'overrides',
@@ -75,9 +121,11 @@ export function extractOverrideEntries(pkgJson: Record<string, unknown>): Overri
   const pnpmSection = pkgJson.pnpm as { overrides?: Record<string, OverrideValue> } | undefined;
   if (pnpmSection?.overrides && typeof pnpmSection.overrides === 'object') {
     for (const [key, value] of Object.entries(pnpmSection.overrides)) {
+      const { packageName, parentScope } = parseOverrideKey(key);
       out.push({
         key,
-        packageName: bareName(key),
+        packageName,
+        ...(parentScope !== undefined ? { parentScope } : {}),
         value,
         path: ['pnpm', 'overrides', key],
         container: 'pnpm.overrides',
@@ -88,9 +136,11 @@ export function extractOverrideEntries(pkgJson: Record<string, unknown>): Overri
   const yarnResolutions = pkgJson.resolutions as Record<string, OverrideValue> | undefined;
   if (yarnResolutions && typeof yarnResolutions === 'object') {
     for (const [key, value] of Object.entries(yarnResolutions)) {
+      const { packageName, parentScope } = parseOverrideKey(key);
       out.push({
         key,
-        packageName: bareName(key),
+        packageName,
+        ...(parentScope !== undefined ? { parentScope } : {}),
         value,
         path: ['resolutions', key],
         container: 'resolutions',

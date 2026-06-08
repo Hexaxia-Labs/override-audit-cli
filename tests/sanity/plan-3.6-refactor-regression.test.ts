@@ -97,7 +97,10 @@ describe("Plan 3.6 regression: Plan 3 + Plan 3.5 sanity matrix unchanged", () =>
   const STORYBOOK = join(process.cwd(), "cve-lite-ref/examples/storybook");
   const BUN_SIMPLE = join(process.cwd(), "cve-lite-ref/examples/bun-simple");
 
-  it("Ghost (pnpm): 5 findings", async () => {
+  // Plan 6.5 (#14/#15): Ghost's 4 pnpm parent>child selective overrides no longer
+  // false-positive as OA001. Only the genuine OA002 (@tryghost/logging catalog: tag)
+  // remains. Count: 5 -> 1.
+  it("Ghost (pnpm): 1 finding (OA002 only, after parent>child fix)", async () => {
     if (!existsSync(join(GHOST, "package.json"))) {
       console.log(`skip: ${GHOST} not present`);
       return;
@@ -108,10 +111,13 @@ describe("Plan 3.6 regression: Plan 3 + Plan 3.5 sanity matrix unchanged", () =>
       checkNetwork: false,
     });
     const result = await audit(ctx, { checkNetwork: false });
-    expect(result.findings.length).toBe(5);
+    expect(result.findings.length).toBe(1);
+    expect(result.findings[0].ruleId).toBe("OA002");
   });
 
-  it("Prisma (pnpm): 1 OA001 finding", async () => {
+  // Plan 6.5 (#14/#15): Prisma's @azure/msal-node>uuid selective override is in the
+  // lockfile and presumed-fine, so the old OA001 false positive is gone. Count: 1 -> 0.
+  it("Prisma (pnpm): 0 findings (parent>child false positive removed)", async () => {
     if (!existsSync(join(PRISMA, "package.json"))) {
       console.log(`skip: ${PRISMA} not present`);
       return;
@@ -122,8 +128,7 @@ describe("Plan 3.6 regression: Plan 3 + Plan 3.5 sanity matrix unchanged", () =>
       checkNetwork: false,
     });
     const result = await audit(ctx, { checkNetwork: false });
-    expect(result.findings.length).toBe(1);
-    expect(result.findings[0].ruleId).toBe("OA001");
+    expect(result.findings.length).toBe(0);
   });
 
   it("Storybook (yarn): 7 OA002 findings", async () => {

@@ -73,8 +73,8 @@ const GHOST = join(process.cwd(), "cve-lite-ref/examples/ghost");
 const PRISMA = join(process.cwd(), "cve-lite-ref/examples/prisma");
 const HEXMETRICS = join(homedir(), "Projects/hexmetrics");
 
-describe("Plan 3 pipeline equivalence: preserved scan() vs new audit()", () => {
-  it("Ghost: new findings are a superset of preserved findings", async () => {
+describe("Plan 3 pipeline: new audit() intentionally diverges from preserved on Ghost", () => {
+  it("Ghost: new audit() drops the preserved scanner's parent>child false positives (Plan 6.5)", async () => {
     if (!existsSync(join(GHOST, "package.json"))) {
       console.log(`skip: ${GHOST} not present`);
       return;
@@ -92,23 +92,30 @@ describe("Plan 3 pipeline equivalence: preserved scan() vs new audit()", () => {
     const b = fresh.findings.map(normalizeNew).sort(sortBy);
 
     console.log(`Ghost: preserved=${a.length}, new=${b.length}`);
-    console.log("preserved:", JSON.stringify(a, null, 2));
-    console.log("new:     ", JSON.stringify(b, null, 2));
 
-    // Every preserved finding must appear in the new set. The new set may have
-    // ADDITIONAL findings due to a known divergence in lockfile name extraction:
-    // preserved's regex-based pnpm-lock reader accidentally captured composite
-    // `parent>` keys when an `@` followed (e.g. `eslint-plugin-ghost>@x/y`),
-    // which masked OA001 false-positives on `parent>` bare names. cve-lite's
-    // parser doesn't have this quirk, so OA001 fires on those keys in the new
-    // code. A future detector that walks the dep graph will fix this properly.
+    // This was an equivalence/superset test that CAUGHT #14: preserved and the
+    // pre-6.5 new code both mishandled pnpm `parent>child` selective override
+    // keys (preserved's regex masked some, the new bareName mis-stripped others),
+    // producing OA001 false positives. Plan 6.5 (#14 + #15) fixed this: OA001 no
+    // longer fires on parent>child keys, and OA005 owns them but stays silent on
+    // valid-or-unevaluable selective overrides (a hygiene auditor flags proven
+    // problems, not maybes). So the new set now CORRECTLY diverges from - and is a
+    // strict subset of - the frozen, buggy preserved scanner.
+    //
+    // Ghost's only genuine finding is OA002 on @tryghost/logging (catalog: tag).
+    expect(b.length).toBe(1);
+    expect(b[0].shortRuleId).toBe("OA002");
+
+    // Regression guard for #14: no OA001 false positive on any parent>child key.
+    expect(b.some((f) => f.shortRuleId === "OA001")).toBe(false);
+
+    // The new set is a strict subset of preserved (we only removed false positives).
     const key = (f: NormalizedFinding) => `${f.shortRuleId}|${f.subRule ?? ""}|${f.package}`;
-    const bKeys = new Set(b.map(key));
-    for (const f of a) {
-      expect(bKeys.has(key(f))).toBe(true);
+    const aKeys = new Set(a.map(key));
+    for (const f of b) {
+      expect(aKeys.has(key(f))).toBe(true);
     }
-    expect(b.length).toBeGreaterThanOrEqual(a.length);
-    expect(b.length).toBeGreaterThan(0);
+    expect(b.length).toBeLessThan(a.length);
   });
 });
 

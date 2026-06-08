@@ -134,7 +134,9 @@ describe("Plan 4.5: detector polish - OA002 npm: alias + OA005 suggest fix", () 
     const STORYBOOK = join(process.cwd(), "cve-lite-ref/examples/storybook");
     const BUN_SIMPLE = join(process.cwd(), "cve-lite-ref/examples/bun-simple");
 
-    it("Ghost (pnpm) still produces 5 findings", async () => {
+    // Plan 6.5 (#14/#15) changed these counts: Ghost 5 -> 1, Prisma 1 -> 0, after
+    // pnpm parent>child selective overrides stopped false-positiving as OA001.
+    it("Ghost (pnpm) produces 1 finding (OA002 only)", async () => {
       if (!existsSync(join(GHOST, "package.json"))) {
         console.log(`skip: ${GHOST} not present`);
         return;
@@ -145,10 +147,11 @@ describe("Plan 4.5: detector polish - OA002 npm: alias + OA005 suggest fix", () 
         checkNetwork: false,
       });
       const result = await audit(ctx, { checkNetwork: false });
-      expect(result.findings.length).toBe(5);
+      expect(result.findings.length).toBe(1);
+      expect(result.findings[0].ruleId).toBe("OA002");
     });
 
-    it("Prisma (pnpm) still produces 1 OA001 finding", async () => {
+    it("Prisma (pnpm) produces 0 findings", async () => {
       if (!existsSync(join(PRISMA, "package.json"))) {
         console.log(`skip: ${PRISMA} not present`);
         return;
@@ -159,8 +162,7 @@ describe("Plan 4.5: detector polish - OA002 npm: alias + OA005 suggest fix", () 
         checkNetwork: false,
       });
       const result = await audit(ctx, { checkNetwork: false });
-      expect(result.findings.length).toBe(1);
-      expect(result.findings[0].ruleId).toBe("OA001");
+      expect(result.findings.length).toBe(0);
     });
 
     it("Storybook (yarn) still produces 7 OA002 findings", async () => {

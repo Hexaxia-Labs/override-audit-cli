@@ -11,13 +11,20 @@ interface NestedCtxExtension {
 }
 
 /**
- * OA005-NESTED-INEFFECTIVE - nested-object override entries `{ parent: { inner: ver } }`.
+ * OA005-NESTED-INEFFECTIVE - nested overrides in two shapes:
+ *   - npm object form    `{ parent: { inner: ver } }`
+ *   - pnpm flat-string   `"parent>inner": ver`
  * Single detector, five sub-codes routed in priority order:
- *   .a         (critical) - nested form in pnpm project (silently ignored)
+ *   .a         (critical) - nested form ineffective for this pm (silently ignored)
  *   .b         (high)     - outer parent not in resolved tree
  *   .c         (high)     - outer in tree, but inner not declared in parent's deps
  *   .d         (medium)   - inner installed elsewhere at version not satisfying pin
  *   .e         (info)     - valid + effective, stylistic suggestion to flatten
+ *
+ * The `.a` ineffectiveness test depends on the shape:
+ *   - object form is npm-specific, so it is ineffective in any non-npm project.
+ *   - flat-string `parent>child` is pnpm-specific, so it is ineffective in any
+ *     non-pnpm project (npm/yarn/bun do not honour `>` selective syntax).
  */
 export function detect(ctx: OverrideContext): OverrideFinding[] {
   const lookup =
@@ -27,7 +34,7 @@ export function detect(ctx: OverrideContext): OverrideFinding[] {
   const findings: OverrideFinding[] = [];
   for (const entry of ctx.overrideEntries) {
     if (typeof entry.value !== "string") {
-      // Each nested-object entry yields one finding per inner key.
+      // npm object form: each nested-object entry yields one finding per inner key.
       for (const [innerKey, innerValue] of Object.entries(entry.value as Record<string, unknown>)) {
         if (typeof innerValue !== "string") continue;
         const finding = classify({
@@ -37,9 +44,23 @@ export function detect(ctx: OverrideContext): OverrideFinding[] {
           innerValue,
           entryPath: entry.path,
           lookup,
+          form: "object",
         });
         if (finding) findings.push(finding);
       }
+    } else if (entry.parentScope !== undefined) {
+      // pnpm flat-string form: `"parent>child": ver`. The parser put the child
+      // in packageName and the parent in parentScope.
+      const finding = classify({
+        ctx,
+        outerKey: entry.parentScope,
+        innerKey: entry.packageName,
+        innerValue: entry.value,
+        entryPath: entry.path,
+        lookup,
+        form: "flat-pnpm",
+      });
+      if (finding) findings.push(finding);
     }
   }
   return findings;
@@ -52,10 +73,12 @@ interface ClassifyArgs {
   innerValue: string;
   entryPath: string[];
   lookup: (name: string) => InstalledManifest | null;
+  /** "object" = npm `{parent:{child}}`; "flat-pnpm" = pnpm `"parent>child"`. */
+  form: "object" | "flat-pnpm";
 }
 
 function classify(args: ClassifyArgs): OverrideFinding | null {
-  const { ctx, outerKey, innerKey, innerValue, entryPath, lookup } = args;
+  const { ctx, outerKey, innerKey, innerValue, entryPath, lookup, form } = args;
 
   const findingBase = (
     subId: import("../types.js").OverrideSubRuleId,
@@ -85,13 +108,22 @@ function classify(args: ClassifyArgs): OverrideFinding | null {
     ],
   });
 
-  // .a - npm-only nested form in non-npm project: silently ignored entirely.
-  if (ctx.packageManager !== "npm") {
+  // .a - nested form ineffective for this package manager: silently ignored.
+  //   object form  -> npm-specific, ineffective in any non-npm project.
+  //   flat-pnpm    -> pnpm-specific `parent>child`, ineffective in any non-pnpm
+  //                   project (npm/yarn/bun do not honour `>` selective syntax).
+  const ineffectiveForm =
+    form === "object" ? ctx.packageManager !== "npm" : ctx.packageManager !== "pnpm";
+  if (ineffectiveForm) {
+    const formDesc =
+      form === "object"
+        ? `${ctx.packageManager} does not honour the npm-specific nested-object override form. The pin "${outerKey}.${innerKey}" = "${innerValue}" has no effect.`
+        : `${ctx.packageManager} does not honour the pnpm-specific "parent>child" selective override form. The pin "${outerKey}>${innerKey}" = "${innerValue}" has no effect.`;
     return findingBase(
       "OA005.a",
       "critical",
-      "Nested override in non-npm project (silently ignored)",
-      `${ctx.packageManager} does not honour the npm-specific nested-object override form. The pin "${outerKey}.${innerKey}" = "${innerValue}" has no effect.`,
+      "Nested override ineffective for this package manager (silently ignored)",
+      formDesc,
       "remove",
     );
   }
@@ -140,7 +172,17 @@ function classify(args: ClassifyArgs): OverrideFinding | null {
     }
   }
 
-  // .e - suspect: valid and effective, but flat form would be more durable.
+  // .e - npm object form only: valid and effective, flat form would be more durable.
+  //
+  // For pnpm flat-string selective overrides we deliberately emit NO finding here.
+  // Scoping `parent>child` to one parent is the feature, not a smell, so "could be
+  // flattened" is both noise and bad advice (flattening changes scoped to global).
+  // We only speak when a selective override is PROVEN broken: .b (parent not in the
+  // resolved tree) and .c (parent does not declare the child, requires node_modules).
+  // When node_modules is absent we cannot run .c/.d, so an unbroken-looking selective
+  // override is presumed fine - a hygiene auditor flags proven problems, not maybes.
+  if (form === "flat-pnpm") return null;
+
   return findingBase(
     "OA005.e",
     "low",

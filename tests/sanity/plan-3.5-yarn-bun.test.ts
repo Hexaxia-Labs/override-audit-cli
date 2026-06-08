@@ -121,13 +121,14 @@ describe("Plan 3.5: real-project dogfood via audit()", () => {
 
 describe("Plan 3.5 regression check: Plan 3 sanity matrix unchanged", () => {
   // The Plan 3 sanity matrix was: Ghost preserved=3 / new=5; Prisma 1; hexmetrics 1.
-  // Plan 3.5 should not affect these counts (yarn / bun additions are additive on
-  // the parsing side; the npm and pnpm pipelines stay the same).
+  // Plan 6.5 (#14/#15) later corrected the pnpm parent>child false positives:
+  // Ghost new=1, Prisma=0. Plan 3.5 (yarn / bun) does not affect these counts.
 
   const GHOST = join(process.cwd(), "cve-lite-ref/examples/ghost");
   const PRISMA = join(process.cwd(), "cve-lite-ref/examples/prisma");
 
-  it("Ghost (pnpm) still produces the same 5 findings after Plan 3.5", async () => {
+  // Plan 6.5 (#14/#15): Ghost 5 -> 1, Prisma 1 -> 0 after the pnpm parent>child fix.
+  it("Ghost (pnpm) produces 1 finding (OA002 only) after the parent>child fix", async () => {
     if (!existsSync(join(GHOST, "package.json"))) {
       console.log(`skip: ${GHOST} not present`);
       return;
@@ -138,10 +139,11 @@ describe("Plan 3.5 regression check: Plan 3 sanity matrix unchanged", () => {
       checkNetwork: false,
     });
     const result = await audit(ctx, { checkNetwork: false });
-    expect(result.findings.length).toBe(5);
+    expect(result.findings.length).toBe(1);
+    expect(result.findings[0].ruleId).toBe("OA002");
   });
 
-  it("Prisma (pnpm) still produces 1 finding after Plan 3.5", async () => {
+  it("Prisma (pnpm) produces 0 findings after the parent>child fix", async () => {
     if (!existsSync(join(PRISMA, "package.json"))) {
       console.log(`skip: ${PRISMA} not present`);
       return;
@@ -152,7 +154,6 @@ describe("Plan 3.5 regression check: Plan 3 sanity matrix unchanged", () => {
       checkNetwork: false,
     });
     const result = await audit(ctx, { checkNetwork: false });
-    expect(result.findings.length).toBe(1);
-    expect(result.findings[0].ruleId).toBe("OA001");
+    expect(result.findings.length).toBe(0);
   });
 });

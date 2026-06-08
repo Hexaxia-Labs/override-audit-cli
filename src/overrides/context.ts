@@ -18,8 +18,18 @@ export type OverrideValue = string | { [key: string]: OverrideValue };
 export interface OverrideEntry {
   /** Original key as written: "postcss" or "react@>=18". */
   key: string;
-  /** Bare package name (key with any `@>=...` specifier stripped). */
+  /**
+   * Bare package name (key with any `@>=...` specifier stripped). For a pnpm
+   * selective `parent>child` key this is the CHILD target (the real package
+   * being overridden), and `parentScope` carries the parent.
+   */
   packageName: string;
+  /**
+   * For pnpm selective `parent>child` keys: the parent scope (bare name).
+   * Undefined for plain keys. When set, OA001 skips the entry and OA005 owns
+   * the "is this nested override sensible" question.
+   */
+  parentScope?: string;
   value: OverrideValue;
   /** Path through package.json: ["overrides","postcss"] or ["pnpm","overrides","react"]. */
   path: string[];

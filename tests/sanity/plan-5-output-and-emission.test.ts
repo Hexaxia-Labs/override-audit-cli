@@ -210,7 +210,10 @@ describe("Plan 5: Output and emission stable", () => {
   });
 
   describe("Plan 4 dogfood matrix unchanged", () => {
-    it("test 6: Ghost fixture has 5 findings, Prisma has 1 OA001, Storybook has 7 OA002", async () => {
+    // Plan 6.5 (#14/#15): Ghost 5 -> 1 (OA002 only), Prisma 1 -> 0, after pnpm
+    // parent>child selective overrides stopped false-positiving as OA001. Storybook
+    // (yarn, no parent>child) is unchanged at 7 OA002.
+    it("test 6: Ghost has 1 finding, Prisma has 0, Storybook has 7 OA002", async () => {
       const ghostPath = join(cveRefPath, "examples", "ghost");
       const prismaPath = join(cveRefPath, "examples", "prisma");
       const storyookPath = join(cveRefPath, "examples", "storybook");
@@ -224,13 +227,13 @@ describe("Plan 5: Output and emission stable", () => {
       const ghostCtx = buildOverrideContext(ghostPath, { auditLog: log, logger: noop(), checkNetwork: false });
       const ghostResult = await audit(ghostCtx, { checkNetwork: false });
 
-      expect(ghostResult.findings.length).toBe(5);
+      expect(ghostResult.findings.length).toBe(1);
+      expect(ghostResult.findings[0].ruleId).toBe("OA002");
 
       const prismaCtx = buildOverrideContext(prismaPath, { auditLog: NULL_AUDIT_LOG, logger: noop(), checkNetwork: false });
       const prismaResult = await audit(prismaCtx, { checkNetwork: false });
 
-      const prismaOA001 = prismaResult.findings.filter((f) => f.ruleId === "OA001");
-      expect(prismaOA001.length).toBe(1);
+      expect(prismaResult.findings.length).toBe(0);
 
       const storyookCtx = buildOverrideContext(storyookPath, { auditLog: NULL_AUDIT_LOG, logger: noop(), checkNetwork: false });
       const storyookResult = await audit(storyookCtx, { checkNetwork: false });
