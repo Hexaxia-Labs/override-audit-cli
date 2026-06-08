@@ -3,7 +3,6 @@ import type { OverrideFinding } from '../types.js';
 import { jsonPointer } from '../parsing/json-pointer.js';
 import { compareVersions, looksLikeVersion } from '../../utils/version.js';
 import { looksLikePlatformBinary } from './platform-binary.js';
-import { shellQuote } from '../../utils/string.js';
 
 const RULE_ID = 'OA006' as const;
 
@@ -94,7 +93,7 @@ export function detect(ctx: OverrideContext): OverrideFinding[] {
       fix: {
         type: 'rfc6902',
         patch: patches,
-        runnableCommand: `cve-lite overrides --fix --rule OA006 --target ${shellQuote(entry.packageName)}`,
+        runnableCommand: `cve-lite overrides --fix --rule OA006`,
       },
       references: ['https://github.com/OWASP/cve-lite-cli/blob/main/docs/rules/OA006.md'],
     };

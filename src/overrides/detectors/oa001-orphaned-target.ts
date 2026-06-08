@@ -1,7 +1,6 @@
 import type { OverrideContext } from "../context.js";
 import type { OverrideFinding } from "../types.js";
 import { jsonPointer } from "../parsing/json-pointer.js";
-import { shellQuote } from "../../utils/string.js";
 
 const RULE_ID = "OA001" as const;
 
@@ -24,7 +23,7 @@ export function detect(ctx: OverrideContext): OverrideFinding[] {
       fix: {
         type: "rfc6902",
         patch: [{ op: "remove", path: jsonPointer(entry.path) }],
-        runnableCommand: `cve-lite overrides --fix --rule OA001 --target ${shellQuote(entry.packageName)}`,
+        runnableCommand: `cve-lite overrides --fix --rule OA001`,
       },
       references: [
         "https://github.com/OWASP/cve-lite-cli/blob/main/docs/rules/OA001.md",

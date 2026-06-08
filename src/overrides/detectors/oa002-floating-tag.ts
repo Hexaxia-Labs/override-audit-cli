@@ -2,7 +2,6 @@ import type { OverrideContext } from "../context.js";
 import type { OverrideFinding } from "../types.js";
 import { jsonPointer } from "../parsing/json-pointer.js";
 import { isValidRange } from "../../utils/version.js";
-import { shellQuote } from "../../utils/string.js";
 
 const RULE_ID = "OA002" as const;
 const FLOATING = new Set(['latest', 'next', '*', 'x', '']);
@@ -37,7 +36,7 @@ export function detect(ctx: OverrideContext): OverrideFinding[] {
       finding.fix = {
         type: 'rfc6902',
         patch: [{ op: 'replace', path: jsonPointer(entry.path), value: floor }],
-        runnableCommand: `cve-lite overrides --fix --rule OA002 --target ${shellQuote(entry.packageName)}`,
+        runnableCommand: `cve-lite overrides --fix --rule OA002`,
       };
     }
 

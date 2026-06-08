@@ -64,7 +64,7 @@ export function detect(ctx: OverrideContext): OverrideFinding[] {
       fix: {
         type: "rfc6902",
         patch: [{ op: "replace", path: jsonPointer(entry.path), value: `>=${registryVersion}` }],
-        runnableCommand: `cve-lite overrides --fix --rule OA007 --target ${entry.packageName}`,
+        runnableCommand: `cve-lite overrides --fix --rule OA007`,
       },
       references: ["https://github.com/OWASP/cve-lite-cli/blob/main/docs/rules/OA007.md"],
     });

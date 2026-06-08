@@ -30,7 +30,7 @@ import { NULL_AUDIT_LOG } from "../../src/audit-log/index.js";
 
 const noop = () => ({ info: () => {}, warn: () => {}, error: () => {}, debug: () => {} }) as any;
 
-describe("Plan 3.6: shellQuote still wired into detector runnableCommand fields", () => {
+describe("Plan 3.6 + Plan 6.5: detector runnableCommand format", () => {
   let dir: string;
 
   beforeEach(() => {
@@ -38,7 +38,7 @@ describe("Plan 3.6: shellQuote still wired into detector runnableCommand fields"
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-  it("OA001 finding's runnableCommand passes a plain package name through unchanged", async () => {
+  it("OA001 finding's runnableCommand is a basic fix command without target", async () => {
     writeFileSync(join(dir, "package.json"), JSON.stringify({
       name: "x",
       overrides: { "orphaned-pkg": "1.0.0" },
@@ -60,12 +60,10 @@ describe("Plan 3.6: shellQuote still wired into detector runnableCommand fields"
     const result = await audit(ctx, { checkNetwork: false });
     const oa001 = result.findings.find((f) => f.ruleId === "OA001");
     expect(oa001).toBeDefined();
-    expect(oa001!.fix?.runnableCommand).toContain("orphaned-pkg");
-    // Plain identifier passes through shellQuote unchanged; no quoting expected.
-    expect(oa001!.fix?.runnableCommand).not.toMatch(/'orphaned-pkg'/);
+    expect(oa001!.fix?.runnableCommand).toBe("cve-lite overrides --fix --rule OA001");
   });
 
-  it("OA001 finding's runnableCommand embeds a scoped package name literally", async () => {
+  it("OA001 finding's runnableCommand is the same format for scoped packages", async () => {
     writeFileSync(join(dir, "package.json"), JSON.stringify({
       name: "x",
       overrides: { "@scope/orphan": "1.0.0" },
@@ -86,8 +84,7 @@ describe("Plan 3.6: shellQuote still wired into detector runnableCommand fields"
     const result = await audit(ctx, { checkNetwork: false });
     const oa001 = result.findings.find((f) => f.ruleId === "OA001");
     expect(oa001).toBeDefined();
-    // shellQuote's safe-character set includes @./:- so @scope/orphan does NOT need quoting.
-    expect(oa001!.fix?.runnableCommand).toContain("@scope/orphan");
+    expect(oa001!.fix?.runnableCommand).toBe("cve-lite overrides --fix --rule OA001");
   });
 });
 

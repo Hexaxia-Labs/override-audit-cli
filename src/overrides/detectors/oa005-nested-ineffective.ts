@@ -3,7 +3,6 @@ import type { OverrideFinding } from "../types.js";
 import { jsonPointer } from "../parsing/json-pointer.js";
 import { readInstalledManifest, type InstalledManifest } from "../parsing/node-modules.js";
 import { satisfiesRange, isValidRange } from "../../utils/version.js";
-import { shellQuote } from "../../utils/string.js";
 
 const RULE_ID = "OA005" as const;
 
@@ -77,7 +76,7 @@ function classify(args: ClassifyArgs): OverrideFinding | null {
           fix: {
             type: "rfc6902" as const,
             patch: [{ op: "remove", path: jsonPointer(entryPath) }],
-            runnableCommand: `cve-lite overrides --fix --rule OA005 --target ${shellQuote(outerKey)}`,
+            runnableCommand: `cve-lite overrides --fix --rule OA005`,
           },
         }
       : {}),
