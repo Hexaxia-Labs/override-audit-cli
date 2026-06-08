@@ -1,7 +1,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { OverrideFinding, RFC6902Op } from "./types.js";
+import type { OverrideFinding, OverrideFixOp } from "./types.js";
 import type { AuditLogHandle } from "../audit-log/index.js";
+import { jsonPointer } from "./parsing/json-pointer.js";
 
 export interface FixOptions {
   projectPath: string;
@@ -13,7 +14,7 @@ export interface FixOptions {
 export interface AppliedPatch {
   ruleId: OverrideFinding["ruleId"];
   package: string;
-  patches: RFC6902Op[];
+  patches: OverrideFixOp[];
 }
 
 export interface SkippedForFix {
@@ -46,30 +47,58 @@ export function applyFix(opts: FixOptions): FixReport {
       });
       continue;
     }
+    const before = overrideKeySet(state);
+    let next = state;
     try {
       for (const op of finding.fix.patch) {
-        state = applyOp(state, op);
+        next = applyOp(next, op);
       }
-      applied.push({
-        ruleId: finding.ruleId,
-        package: finding.package.name,
-        patches: finding.fix.patch.slice(),
-      });
-      auditLog.emit({
-        ts: new Date().toISOString(),
-        type: "oa.fix.applied",
-        schemaVersion: 1,
-        ruleId: finding.ruleId,
-        package: finding.package.name,
-        patches: finding.fix.patch,
-      });
     } catch (err) {
       skipped.push({
         ruleId: finding.ruleId,
         package: finding.package.name,
         reason: err instanceof Error ? err.message : String(err),
       });
+      continue;
     }
+
+    // Chokepoint guard: override hygiene must never invent a new override key.
+    // The only sanctioned way to introduce a key is relocate, which writes a
+    // dependency floor, not an override. Reject and log anything that grows the
+    // override key set, and commit nothing for that finding.
+    const created = [...overrideKeySet(next)].filter((k) => !before.has(k));
+    if (created.length > 0) {
+      auditLog.emit({
+        ts: new Date().toISOString(),
+        type: "error",
+        schemaVersion: 1,
+        phase: "fix-guard",
+        message:
+          `rejected fix for ${finding.ruleId} on ${finding.package.name}: ` +
+          `would create override key(s) ${created.join(", ")}`,
+      });
+      skipped.push({
+        ruleId: finding.ruleId,
+        package: finding.package.name,
+        reason: `fix-guard: would create override key(s) ${created.join(", ")}`,
+      });
+      continue;
+    }
+
+    state = next;
+    applied.push({
+      ruleId: finding.ruleId,
+      package: finding.package.name,
+      patches: finding.fix.patch.slice(),
+    });
+    auditLog.emit({
+      ts: new Date().toISOString(),
+      type: "oa.fix.applied",
+      schemaVersion: 1,
+      ruleId: finding.ruleId,
+      package: finding.package.name,
+      patches: finding.fix.patch.map(loggableOp),
+    });
   }
 
   if (!dryRun && applied.length > 0) {
@@ -91,31 +120,55 @@ function detectIndent(raw: string): number {
   return m[1].length;
 }
 
-function applyOp(doc: Record<string, unknown>, op: RFC6902Op): Record<string, unknown> {
+function applyOp(doc: Record<string, unknown>, op: OverrideFixOp): Record<string, unknown> {
   switch (op.op) {
     case "remove":
       return mutate(doc, op.path, () => undefined);
     case "replace":
-      return mutate(doc, op.path, () => op.value);
-    case "add":
       return mutate(doc, op.path, () => op.value);
     case "move": {
       const value = read(doc, op.from);
       doc = mutate(doc, op.from, () => undefined);
       return mutate(doc, op.path, () => value);
     }
-    case "copy": {
-      const value = read(doc, op.from);
-      return mutate(doc, op.path, () => value);
-    }
-    case "test": {
-      const value = read(doc, op.path);
-      if (JSON.stringify(value) !== JSON.stringify(op.value)) {
-        throw new Error(`test failed at ${op.path}`);
-      }
-      return doc;
+    case "relocate": {
+      // Retire the child override and carry its constraint as a parent dependency
+      // floor. This introduces a key under /dependencies (an upgrade), never a new
+      // override - the chokepoint guard in applyFix enforces that invariant.
+      doc = mutate(doc, op.fromChild, () => undefined);
+      return mutate(doc, jsonPointer(["dependencies", op.toParent]), () => op.floor);
     }
   }
+}
+
+/**
+ * Collect the set of keys under every override container. The chokepoint guard
+ * compares this before/after a fix: override hygiene may remove or repin existing
+ * overrides, but it must never invent a new one. relocate writes a dependency, not
+ * an override, so it does not grow this set.
+ */
+function overrideKeySet(doc: Record<string, unknown>): Set<string> {
+  const out = new Set<string>();
+  const collect = (obj: unknown, prefix: string) => {
+    if (obj && typeof obj === "object") {
+      for (const k of Object.keys(obj as Record<string, unknown>)) out.add(prefix + k);
+    }
+  };
+  collect(doc.overrides, "overrides/");
+  const pnpm = doc.pnpm as { overrides?: unknown } | undefined;
+  collect(pnpm?.overrides, "pnpm.overrides/");
+  collect(doc.resolutions, "resolutions/");
+  return out;
+}
+
+/** Loggable representation of a fix op (relocate has no single `path`). */
+function loggableOp(op: OverrideFixOp): { op: string; path: string; value?: unknown; from?: string } {
+  if (op.op === "relocate") {
+    return { op: "relocate", path: op.fromChild, from: op.toParent, value: op.floor };
+  }
+  if (op.op === "move") return { op: "move", path: op.path, from: op.from };
+  if (op.op === "remove") return { op: "remove", path: op.path };
+  return { op: "replace", path: op.path, value: op.value };
 }
 
 function read(doc: unknown, pointer: string): unknown {

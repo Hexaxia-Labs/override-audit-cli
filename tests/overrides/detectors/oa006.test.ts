@@ -68,16 +68,22 @@ describe('OA006-COUPLED-PLATFORM-BINARY', () => {
     expect(findings[0]!.details).toContain('esbuild');
   });
 
-  it('emits multi-op patches: remove binary override and add parent override', () => {
+  it('emits a relocate op (retire binary override, add parent dependency floor) when the parent has no override', () => {
     const ctx = ctxOf(
       [e('@esbuild/linux-x64', 'latest')],
       { '@esbuild/linux-x64': [exactParent('esbuild', '0.25.12', '0.25.12')] },
     );
     const findings = detect(ctx);
     const patches = findings[0]!.fix!.patch;
-    expect(patches).toHaveLength(2);
-    expect(patches[0]).toEqual({ op: 'remove', path: '/overrides/@esbuild~1linux-x64' });
-    expect(patches[1]).toEqual({ op: 'add', path: '/overrides/esbuild', value: '>=0.25.12' });
+    expect(patches).toHaveLength(1);
+    expect(patches[0]).toEqual({
+      op: 'relocate',
+      fromChild: '/overrides/@esbuild~1linux-x64',
+      toParent: 'esbuild',
+      floor: '>=0.25.12',
+    });
+    // relocate writes an inferred floor, so the fix is proposed-not-applied by default.
+    expect(findings[0]!.fix!.tier).toBe('proposed');
   });
 
   it('emits replace (not add) when an override on the parent already exists', () => {
@@ -93,7 +99,7 @@ describe('OA006-COUPLED-PLATFORM-BINARY', () => {
     expect(patches[1]).toEqual({ op: 'replace', path: '/overrides/esbuild', value: '>=0.25.12' });
   });
 
-  it('mirrors the container (pnpm.overrides) for pnpm projects', () => {
+  it('relocates from the correct container (pnpm.overrides) for pnpm projects', () => {
     const ctx: OverrideContext = {
       ...ctxOf([], {}),
       packageManager: 'pnpm',
@@ -110,7 +116,14 @@ describe('OA006-COUPLED-PLATFORM-BINARY', () => {
     };
     const findings = detect(ctx);
     const patches = findings[0]!.fix!.patch;
-    expect(patches[1]).toEqual({ op: 'add', path: '/pnpm/overrides/esbuild', value: '>=0.25.12' });
+    // fromChild points at the pnpm.overrides container; the floor lands on the
+    // parent as a dependency (the applier writes /dependencies/esbuild), not a new override.
+    expect(patches[0]).toEqual({
+      op: 'relocate',
+      fromChild: '/pnpm/overrides/@esbuild~1linux-x64',
+      toParent: 'esbuild',
+      floor: '>=0.25.12',
+    });
   });
 
   it('flags non-platform-binary target at MEDIUM severity (currently effective, but fragile)', () => {
@@ -156,7 +169,9 @@ describe('OA006-COUPLED-PLATFORM-BINARY', () => {
       },
     );
     const findings = detect(ctx);
-    expect(findings[0]!.fix!.patch[1]!.value).toBe('>=0.28.0');
+    const op = findings[0]!.fix!.patch[0]!;
+    expect(op.op).toBe('relocate');
+    expect(op.op === 'relocate' && op.floor).toBe('>=0.28.0');
   });
 
   it('does not crash on nested-object overrides (skips them - OA005)', () => {

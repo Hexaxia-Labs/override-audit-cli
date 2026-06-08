@@ -53,26 +53,29 @@ export function detect(ctx: OverrideContext): OverrideFinding[] {
     const isPlatform = looksLikePlatformBinary(entry.packageName);
     const severity = isPlatform ? 'high' : 'medium';
 
-    // Build the multi-op patch: remove the binary override, add a parent override.
-    // The parent-override path lives in the same container as the binary one
-    // (top-level overrides for npm, pnpm.overrides for pnpm).
-    const parentPath = buildParentOverridePath(entry, parentChoice.parentName);
+    // The override on the binary cannot win against the parent's exact pin, so the
+    // durable fix carries the constraint up to the parent. Two shapes:
+    //   - parent already has an override: repin that existing override to the floor.
+    //   - parent has no override: relocate - retire the binary override and add a
+    //     parent DEPENDENCY floor (upgrade the parent), never a new override entry.
+    // Both write an inferred floor, so the fix is tier "proposed" (surfaced, not
+    // applied by default). See docs/merge/2026-06-08-relocate-op-design.md.
     const existingParentEntry = findExistingOverride(ctx, parentChoice.parentName);
 
-    let patches: import('../types.js').RFC6902Op[];
+    let patches: import('../types.js').OverrideFixOp[];
     if (existingParentEntry) {
-      // Parent already has an override - replace its value with the suggested floor.
-      // Single-op (no removal needed if the binary override doesn't exist... but it does).
-      // Actually still multi-op: remove binary + replace existing parent.
       patches = [
         { op: 'remove', path: jsonPointer(entry.path) },
         { op: 'replace', path: jsonPointer(existingParentEntry.path), value: suggestedFloor },
       ];
     } else {
-      // No existing parent override - remove binary + add new parent entry.
       patches = [
-        { op: 'remove', path: jsonPointer(entry.path) },
-        { op: 'add', path: jsonPointer(parentPath), value: suggestedFloor },
+        {
+          op: 'relocate',
+          fromChild: jsonPointer(entry.path),
+          toParent: parentChoice.parentName,
+          floor: suggestedFloor,
+        },
       ];
     }
 
@@ -94,6 +97,7 @@ export function detect(ctx: OverrideContext): OverrideFinding[] {
         type: 'rfc6902',
         patch: patches,
         runnableCommand: `cve-lite overrides --fix --rule OA006`,
+        tier: 'proposed',
       },
       references: ['https://github.com/OWASP/cve-lite-cli/blob/main/docs/rules/OA006.md'],
     };
@@ -132,10 +136,6 @@ function suggestParentFloor(_pin: string, parent: ParentDeclaration): string {
  *   ['overrides', '@esbuild/linux-x64'] -> ['overrides', 'esbuild']
  *   ['pnpm', 'overrides', '@esbuild/linux-x64'] -> ['pnpm', 'overrides', 'esbuild']
  */
-function buildParentOverridePath(entry: OverrideEntry, parentName: string): string[] {
-  const prefix = entry.path.slice(0, -1);
-  return [...prefix, parentName];
-}
 
 /** Find an existing override entry by package name across all containers. */
 function findExistingOverride(ctx: OverrideContext, packageName: string): OverrideEntry | undefined {

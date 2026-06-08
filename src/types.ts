@@ -217,7 +217,7 @@ export type {
   OverrideRuleId,
   OverrideSubRuleId,
   OverrideFix,
-  RFC6902Op,
+  OverrideFixOp,
 } from "./overrides/index.js";
 
 export type { AuditEvent, AuditLogHandle } from "./audit-log/index.js";

@@ -38,7 +38,11 @@ export async function runOverridesFixHook(args: FixHookArgs): Promise<FixHookRes
   });
 
   const auditResult = await audit(ctx, { checkNetwork: false });
-  let fixable = auditResult.findings.filter((f) => f.fix?.type === "rfc6902");
+  // Tier 1 only by default: "proposed" fixes (OA006 relocate, inferred floor) are
+  // surfaced as recommendations, not auto-applied during the post-CVE-fix hook.
+  let fixable = auditResult.findings.filter(
+    (f) => f.fix?.type === "rfc6902" && f.fix.tier !== "proposed"
+  );
   if (args.filterFindings) fixable = args.filterFindings(fixable);
 
   let appliedTargets: VerifyTarget[] = [];

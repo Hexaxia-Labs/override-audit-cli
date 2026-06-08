@@ -23,19 +23,39 @@ export type OverrideSubRuleId =
 
 import type { SeverityLabel } from "../types.js";
 
-export type RFC6902Op =
-  | { op: "add"; path: string; value: unknown }
+/**
+ * Override-fix op vocabulary. No longer pure RFC 6902: bare `add` / `copy` / `test`
+ * are deliberately absent so a fix can never invent an arbitrary override key. The
+ * one sanctioned way to introduce a key is `relocate`, which retires a child override
+ * and expresses its constraint as a parent dependency floor (an upgrade, not a new
+ * override). The applier enforces this with a chokepoint guard. See
+ * docs/merge/2026-06-08-relocate-op-design.md.
+ */
+export type OverrideFixOp =
   | { op: "remove"; path: string }
   | { op: "replace"; path: string; value: unknown }
   | { op: "move"; from: string; path: string }
-  | { op: "copy"; from: string; path: string }
-  | { op: "test"; path: string; value: unknown };
+  | {
+      op: "relocate";
+      /** JSON pointer of the child override to retire (e.g. "/pnpm/overrides/binary"). */
+      fromChild: string;
+      /** Parent package name to carry the constraint as a dependency floor. */
+      toParent: string;
+      /** Inferred version floor written to /dependencies/<toParent> (e.g. ">=2.0.0"). */
+      floor: string;
+    };
 
 export interface OverrideFix {
   type: "rfc6902";
-  patch: RFC6902Op[];
+  patch: OverrideFixOp[];
   /** Optional runnable command equivalent (e.g., `cve-lite overrides --fix ...`). */
   runnableCommand?: string;
+  /**
+   * Auto-fix tier. "auto" (default) is pure hygiene safe to apply silently
+   * (remove / move / determinate replace). "proposed" writes an inferred value
+   * (relocate floor) and is surfaced as a recommendation, not applied by default.
+   */
+  tier?: "auto" | "proposed";
 }
 
 export interface OverrideFinding {

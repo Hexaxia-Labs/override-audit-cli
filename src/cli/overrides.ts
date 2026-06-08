@@ -32,7 +32,11 @@ export async function runOverrides({ projectArg, options, logger }: RunArgs): Pr
     }
 
     if (options.fix) {
-      const fixable = findings.filter((f) => f.fix?.type === "rfc6902");
+      // Tier 1 only by default: "proposed" fixes write an inferred value (OA006
+      // relocate floor) and are surfaced as recommendations, not auto-applied.
+      const fixable = findings.filter(
+        (f) => f.fix?.type === "rfc6902" && f.fix.tier !== "proposed"
+      );
       if (fixable.length > 0) {
         const report = applyFix({
           projectPath,
