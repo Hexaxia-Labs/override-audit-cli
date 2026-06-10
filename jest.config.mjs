@@ -7,6 +7,7 @@ const preset = createDefaultEsmPreset({
 export default {
   ...preset,
   testEnvironment: "node",
+  globalSetup: "<rootDir>/tests/e2e/global-setup.mjs",
   roots: ["<rootDir>/tests"],
   moduleNameMapper: {
     "^(\\.{1,2}/.*)\\.js$": "$1",
