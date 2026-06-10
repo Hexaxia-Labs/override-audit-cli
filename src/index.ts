@@ -52,6 +52,7 @@ import {
   printFinalStatus,
   printCompactOutput
 } from "./output/printers.js";
+import { renderOverrideFindings } from "./output/override-findings-terminal.js";
 import { installSkill } from "./skills/install.js";
 import { readConfig, validateCaCertFile } from "./cli/config.js";
 import { runConfigCommand } from "./cli/config-command.js";
@@ -480,6 +481,12 @@ if (parsedArgs) {
           printFinalStatus(scanState.sorted);
         } else {
           printCompactOutput(scanState.sorted, scanInput, { offline, all: !!options.all });
+        }
+        // Override hygiene section: --check-overrides collects these and threads
+        // them to JSON/SARIF/HTML; render them in the terminal too so the feature
+        // is visible in a plain scan, not only in machine output (#35).
+        if (options.checkOverrides) {
+          console.log(renderOverrideFindings(overrideFindings));
         }
       }
     }

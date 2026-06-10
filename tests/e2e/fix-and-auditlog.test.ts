@@ -199,6 +199,20 @@ describe("e2e: audit-log + scan integration", () => {
     }
   });
 
+  it("--check-overrides renders the override section in the terminal (#35)", () => {
+    // Regression guard: --check-overrides must SHOW override findings on screen,
+    // not only thread them into --json/--sarif/--report. Plain terminal scan.
+    const dir = makeOrphanProject();
+    try {
+      const r = runCli([dir, "--offline", "--check-overrides"]);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toMatch(/Override hygiene/i);
+      expect(r.stdout).toContain("OA001");
+    } finally {
+      rmProject(dir);
+    }
+  });
+
   it("CVE_LITE_AUDIT_LOG env var writes the same scan events as --audit-log", () => {
     const dir = makeOrphanProject();
     const logPath = join(logDir, "env.ndjson");
