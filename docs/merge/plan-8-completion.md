@@ -7,9 +7,11 @@
 
 ## What Plan 8 delivered
 
-A true end-to-end layer that exercises every user-facing control through the **real built binary** (`dist/index.js`, spawned via execFileSync). Before Plan 8 only 6 test files spawned the CLI; the rest were in-process or mocked. Plan 8 adds 46 spawned-CLI tests so that every command, flag, exit code, output channel, detector, fix tier, audit-log path, and package manager is proven to work end-to-end. The 634 pre-existing in-process tests remain the combinatorial depth.
+A true end-to-end layer that exercises every user-facing control of the **entire merged product** - cve-lite's CVE scanning AND the override hygiene - through the **real built binary** (`dist/index.js`, spawned via execFileSync). "100%" means the whole merged product passes e2e before the OWASP handoff, not just the override controls.
 
-Coverage model: every control covered at least once e2e, not every combination. Full suite: 634 -> 686 (+52 including the harness smoke).
+Before Plan 8 only 6 test files spawned the CLI; the rest were in-process or mocked. Plan 8 adds 59 spawned-CLI tests so that every command, flag, exit code, output channel, detector (OA + CVE), fix tier, audit-log path, and package manager is proven to work end-to-end. The 634 pre-existing in-process tests remain the combinatorial depth.
+
+Coverage model: every control covered at least once e2e, not every combination. CVE-detection assertions are drift-resistant (floors + shape + relative behavior, never exact finding counts the advisory DB would invalidate). Full suite: 634 -> 699 (+65 including the harness smoke).
 
 ## Commits
 
@@ -35,6 +37,7 @@ Coverage model: every control covered at least once e2e, not every combination. 
 | `tests/e2e/detectors.test.ts` | 8 | OA001-OA008 fired through the binary |
 | `tests/e2e/fix-and-auditlog.test.ts` | 8 | Tier 1 auto-fix, Tier 2 relocate survives --fix, audit-log events, --check-overrides |
 | `tests/e2e/package-managers.test.ts` | 4 | npm / pnpm / yarn / bun parsed via the binary |
+| `tests/e2e/cve-scanning.test.ts` | 13 | CVE detection core: real findings, severity, --fail-on, filters, fix plan, SARIF/CycloneDX/HTML CVE data, per-PM detection, --prod-only |
 
 ## Coverage matrix
 
@@ -48,6 +51,13 @@ Coverage model: every control covered at least once e2e, not every combination. 
 | terminal, --json, overrides --json, --sarif (+ OA tool component), --report (HTML override section), --cdx (CycloneDX, CVE-only) | covered |
 | OA001-OA006, OA008 | covered (fired e2e) |
 | OA007 frozen latest | network-gated - needs `--check-network` + live registry; asserted when reachable, otherwise defers to in-process `oa007.test.ts` |
+| **CVE detection** (real vulnerable fixtures) | covered (findingCount floors + finding shape: package, severity, cves[]/vulnerabilities[]) |
+| **CVE --fail-on threshold** -> exit code | covered (relative to project max severity) |
+| **CVE severity filtering** (--all / --min-severity) | covered (rendered table) |
+| **CVE fix plan** (suggestedFixCommands) | covered (structure) |
+| **CVE data in SARIF / CycloneDX / HTML** | covered (real results, not just structure) |
+| **CVE detection across npm/pnpm/yarn** | covered |
+| **--prod-only** | covered (relative count) |
 | Tier 1 auto-fix applied; Tier 2 (OA006 relocate) NOT applied | covered |
 | applier chokepoint guard | covered in-process (`tests/overrides/fixer.test.ts`) - construction is impractical via the binary |
 | --audit-log + CVE_LITE_AUDIT_LOG env; scan.started/finished, oa.detected | covered |
@@ -57,11 +67,17 @@ Coverage model: every control covered at least once e2e, not every combination. 
 ## Test results at HEAD
 
 ```
-npm test    -> 686 passed, 75 suites
+npm test    -> 699 passed, 76 suites
 npx tsc     -> clean
 lint:tests  -> passes (no Mocha-isms, no focused tests)
 em dashes   -> 0 in the Plan 8 diff
 ```
+
+## Behavior notes surfaced during CVE e2e
+
+- The real finding fields are `cves[]` (CVE id strings) and `vulnerabilities[]` (`{id, aliases, summary, severity}`), not the `cveAliases`/`vulnerabilityIds` the spec guessed. Tests assert against the real shape.
+- `--min-severity` filters only the rendered table, not the `--json` data (findingCount is unchanged). Defensible (JSON consumers want the full set and filter themselves), noted for the handoff.
+- Dogfooding the built tool also surfaced #35: `scan --check-overrides` collects override findings and writes them to JSON/SARIF/HTML but does not render them in the terminal. Real gap, filed, small fix.
 
 ## Execution method
 

@@ -94,6 +94,19 @@ Each row is one or more e2e tests. A task owns a group.
 - [ ] yarn (yarn.lock)
 - [ ] bun (bun.lock)
 
+### Task 11: CVE scanning core (the other half of the merged product)
+
+"100% e2e" means the ENTIRE merged product - cve-lite's CVE scanning AND override hygiene - passes e2e before the handoff, not just the override controls. The CVE detection behavior must be asserted through the real binary, against real vulnerable fixtures (tracked under `examples/`, CI-safe), with drift-resistant assertions (floors + shape + relative behavior, never exact counts the advisory DB would invalidate).
+
+- [ ] detection: scan a vulnerable project -> findingCount floor, finding shape (package, severity, cves[]/vulnerabilities[])
+- [ ] clean project -> 0 findings, exit 0
+- [ ] --fail-on threshold drives exit code, relative to the project's actual max severity
+- [ ] severity filtering (--all / --min-severity) on the rendered table
+- [ ] suggestedFixCommands structure present
+- [ ] real CVE data in SARIF (runs[0].results), CycloneDX (vulnerabilities[]), HTML
+- [ ] detection across npm / pnpm / yarn fixtures
+- [ ] --prod-only relative count
+
 ### Task 10: Sanity + gate + completion log
 - [ ] Plan 8 sanity test (a thin meta-test asserting the harness builds dist and runCli works)
 - [ ] Full suite green, tsc clean, hygiene gate, em-dash sweep
