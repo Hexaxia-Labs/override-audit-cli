@@ -13,6 +13,8 @@ export type CreatePullRequestParams = {
   fixResult: FixExecutionResult;
   findingsBeforeFix: Finding[];
   findingsAfterFix: Finding[];
+  /** Number of override hygiene fixes applied to package.json before the PR. */
+  overrideFixCount?: number;
 };
 
 export type CreatePullRequestResult = {
@@ -50,12 +52,22 @@ export function defaultFixBranchName(date = new Date()): string {
   return `cve-lite/fix-${year}-${month}-${day}`;
 }
 
-export function buildPullRequestTitle(appliedCount: number, packageNames: string[]): string {
+export function buildPullRequestTitle(
+  appliedCount: number,
+  packageNames: string[],
+  overrideFixCount = 0,
+): string {
+  if (appliedCount === 0 && overrideFixCount > 0) {
+    return `[CVE-Lite-CLI] chore: ${overrideFixCount} override hygiene ${pluralize(overrideFixCount, "fix", "fixes")}`;
+  }
   const pkgList =
     packageNames.length <= 3
       ? packageNames.join(", ")
       : `${packageNames.slice(0, 2).join(", ")} +${packageNames.length - 2} more`;
-  return `[CVE-Lite-CLI] fix: upgrade ${pkgList} (${appliedCount} ${pluralize(appliedCount, "vulnerability", "vulnerabilities")} resolved)`;
+  const base = `[CVE-Lite-CLI] fix: upgrade ${pkgList} (${appliedCount} ${pluralize(appliedCount, "vulnerability", "vulnerabilities")} resolved)`;
+  return overrideFixCount > 0
+    ? `${base} + ${overrideFixCount} override hygiene ${pluralize(overrideFixCount, "fix", "fixes")}`
+    : base;
 }
 
 export function collectAdvisoryIdsForPackage(findings: Finding[], packageName: string): string[] {
@@ -78,7 +90,9 @@ export function buildPullRequestBody(params: {
   fixResult: FixExecutionResult;
   findingsBeforeFix: Finding[];
   findingsAfterFix: Finding[];
+  overrideFixCount?: number;
 }): string {
+  const overrideFixCount = params.overrideFixCount ?? 0;
   const lines: string[] = [
     "## Summary",
     "",
@@ -88,11 +102,23 @@ export function buildPullRequestBody(params: {
     "",
   ];
 
+  if (params.fixResult.applied.length === 0) {
+    lines.push("- _No direct CVE fixes in this PR._");
+  }
   for (const item of params.fixResult.applied) {
     const advisoryIds = collectAdvisoryIdsForPackage(params.findingsBeforeFix, item.package);
     const advisoryText = advisoryIds.length > 0 ? advisoryIds.join(", ") : "n/a";
     lines.push(`- **${item.package}**: \`${item.from}\` → \`${item.to}\``);
     lines.push(`  - Advisories: ${advisoryText}`);
+  }
+
+  if (overrideFixCount > 0) {
+    lines.push(
+      "",
+      "## Override hygiene",
+      "",
+      `- Applied **${overrideFixCount}** override hygiene ${pluralize(overrideFixCount, "fix", "fixes")} to \`package.json\` (e.g. removing orphaned or ineffective overrides). Each change is constrained to existing overrides; no new override key is ever introduced.`,
+    );
   }
 
   lines.push(
@@ -220,13 +246,14 @@ export async function createPullRequestForFixes(
   params: CreatePullRequestParams,
 ): Promise<CreatePullRequestResult> {
   const baseBranchName = defaultFixBranchName();
+  const overrideFixCount = params.overrideFixCount ?? 0;
 
-  if (params.fixResult.appliedFixCount === 0) {
+  if (params.fixResult.appliedFixCount === 0 && overrideFixCount === 0) {
     return {
       branchName: baseBranchName,
       prUrl: null,
       skipped: true,
-      skipReason: "No direct dependency fixes were applied, so no pull request was created.",
+      skipReason: "No direct dependency or override hygiene fixes were applied, so no pull request was created.",
     };
   }
 
@@ -243,11 +270,12 @@ export async function createPullRequestForFixes(
   }
 
   const packageNames = params.fixResult.applied.map(a => a.package);
-  const title = buildPullRequestTitle(params.fixResult.appliedFixCount, packageNames);
+  const title = buildPullRequestTitle(params.fixResult.appliedFixCount, packageNames, overrideFixCount);
   const body = buildPullRequestBody({
     fixResult: params.fixResult,
     findingsBeforeFix: params.findingsBeforeFix,
     findingsAfterFix: params.findingsAfterFix,
+    overrideFixCount,
   });
 
   await stageDependencyFilesOnly(params.projectPath);

@@ -352,9 +352,13 @@ if (parsedArgs) {
     let baseline = readBaseline(projectArg ?? ".");
     let suppressedCount = 0;
 
-    // Collect override findings if --check-overrides is set
+    // Collect override findings if --check-overrides is set.
+    // Boundary: override hygiene is independent of the CVE ratchet/baseline. The
+    // baseline only ever records CVE findings (see src/utils/baseline.ts), so a
+    // --ratchet run skips the override audit entirely - override findings are never
+    // baselined or suppressed.
     let overrideFindings: OverrideFinding[] = [];
-    if (options.checkOverrides) {
+    if (options.checkOverrides && !options.ratchet) {
       const overrideCtx = buildOverrideContext(projectPath, {
         auditLog: auditLogHandle,
         logger: {
@@ -488,8 +492,11 @@ if (parsedArgs) {
       });
 
       if (options.createPr && fixResult) {
-        if (fixResult.appliedFixCount === 0) {
-          logWarn("Skipping pull request creation: no direct fixes were applied.", options);
+        // Override hygiene fixes also land in package.json (staged by create-pr), so
+        // a PR is warranted when either CVE fixes or override fixes were applied.
+        const overrideFixCount = overridesFixHookResult?.applied ?? 0;
+        if (fixResult.appliedFixCount === 0 && overrideFixCount === 0) {
+          logWarn("Skipping pull request creation: no direct or override hygiene fixes were applied.", options);
         } else {
           console.log("");
           console.log(chalk.bold.cyan("Creating pull request (--create-pr)"));
@@ -499,6 +506,7 @@ if (parsedArgs) {
             fixResult,
             findingsBeforeFix: findingsBeforeFixList,
             findingsAfterFix: scanState.sorted,
+            overrideFixCount,
           });
           if (prResult.skipped) {
             logWarn(prResult.skipReason ?? "Pull request was not created.", options);
@@ -516,6 +524,9 @@ if (parsedArgs) {
         writeBaseline(projectArg ?? ".", scanState.sorted);
         const count = scanState.sorted.length;
         console.log(chalk.green(`✓ Baseline saved to .cve-lite/baseline.json with ${count} ${count === 1 ? "finding" : "findings"}. Future scans will only report findings above this baseline.`));
+        if (options.checkOverrides) {
+          console.log(chalk.gray("Note: override hygiene (--check-overrides) is not part of the ratchet baseline; run `cve-lite overrides` to audit overrides."));
+        }
         process.exit(0);
         return;
       }

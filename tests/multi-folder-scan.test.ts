@@ -8,6 +8,8 @@ const normalizeSeverityMock = jest.fn<any>(() => "medium");
 const selectFindingsForTableMock = jest.fn<any>((f: any[]) => f);
 const buildSuggestedFixCommandPlanMock = jest.fn<any>(() => null);
 const readDirectDependencyNamesMock = jest.fn<any>(() => new Set<string>());
+const buildOverrideContextMock = jest.fn<any>(() => ({}));
+const auditMock = jest.fn<any>(() => Promise.resolve({ findings: [] }));
 
 jest.unstable_mockModule("../src/parsers/multi-package.js", () => ({
   loadMultiplePackages: loadMultiplePackagesMock,
@@ -42,6 +44,16 @@ jest.unstable_mockModule("../src/remediation/fix-commands.js", () => ({
 
 jest.unstable_mockModule("../src/utils/package-json.js", () => ({
   readDirectDependencyNames: readDirectDependencyNamesMock,
+}));
+
+jest.unstable_mockModule("../src/overrides/index.js", () => ({
+  buildOverrideContext: buildOverrideContextMock,
+  audit: auditMock,
+}));
+
+jest.unstable_mockModule("../src/audit-log/index.js", () => ({
+  NULL_AUDIT_LOG: { emit: jest.fn(), close: jest.fn() },
+  createAuditLog: jest.fn(() => ({ emit: jest.fn(), close: jest.fn() })),
 }));
 
 jest.unstable_mockModule("../src/output/multi-folder-printer.js", () => ({
@@ -157,6 +169,39 @@ describe("runMultiFolderScan", () => {
 
     const written = stdoutWriteSpy.mock.calls.map(call => String(call[0])).join("");
     expect(written).not.toContain("sessionManager/");
+  });
+
+  it("runs the override audit once per folder and attaches findings when --check-overrides is set", async () => {
+    loadMultiplePackagesMock.mockReturnValue([
+      { subfolder: "a", scanInput: makeScanInput() },
+      { subfolder: "b", scanInput: makeScanInput() },
+    ]);
+    auditMock.mockResolvedValue({
+      findings: [
+        { ruleId: "OA001", severity: "high", package: { name: "x" }, location: { file: "package.json" }, message: "orphan" },
+      ],
+    });
+
+    const results = await runMultiFolderScan({
+      projectRoot: "/project",
+      batchSize: 100,
+      options: { ...baseOptions, checkOverrides: true },
+    });
+
+    expect(auditMock).toHaveBeenCalledTimes(2);
+    expect(results[0].overrideFindings).toHaveLength(1);
+    expect(results[0].overrideFindings[0].ruleId).toBe("OA001");
+  });
+
+  it("does not run the override audit when --check-overrides is not set", async () => {
+    loadMultiplePackagesMock.mockReturnValue([
+      { subfolder: "a", scanInput: makeScanInput() },
+    ]);
+
+    const results = await runMultiFolderScan({ projectRoot: "/project", batchSize: 100, options: baseOptions });
+
+    expect(auditMock).not.toHaveBeenCalled();
+    expect(results[0].overrideFindings ?? []).toHaveLength(0);
   });
 
   it("attaches subfolder to suggestedFixCommands plan", async () => {

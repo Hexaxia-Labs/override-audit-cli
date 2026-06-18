@@ -15,6 +15,9 @@ import { printMultiFolderResults } from "../output/multi-folder-printer.js";
 import { writeMultiFolderHtmlReport } from "../output/multi-folder-html-reporter.js";
 import { chalk } from "../utils/chalk.js";
 import { getCliVersion } from "../utils/version-info.js";
+import { buildOverrideContext, audit } from "../overrides/index.js";
+import { NULL_AUDIT_LOG } from "../audit-log/index.js";
+import type { OverrideFinding } from "../overrides/types.js";
 
 export interface MultiFolderScanResult {
   subfolder: string;
@@ -25,6 +28,8 @@ export interface MultiFolderScanResult {
   minSeverity: SeverityLabel;
   tableFindings: Finding[];
   allPackages: PackageRef[];
+  /** Override hygiene findings for this folder, populated when --check-overrides is set. */
+  overrideFindings: OverrideFinding[];
 }
 
 export async function runMultiFolderScan(params: {
@@ -58,6 +63,18 @@ export async function runMultiFolderScan(params: {
     const tableFindings = params.options.all ? sorted : selectFindingsForTable(sorted, minSeverity);
     const suggestedFixCommands = buildSuggestedFixCommandPlan(sorted, scanInput, { offline, subfolder });
 
+    // Override hygiene per folder, mirroring the single-folder --check-overrides path.
+    let overrideFindings: OverrideFinding[] = [];
+    if (params.options.checkOverrides) {
+      const overrideCtx = buildOverrideContext(subfolderAbs, {
+        auditLog: NULL_AUDIT_LOG,
+        logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+        checkNetwork: !!params.options.checkNetwork,
+      });
+      const overrideAudit = await audit(overrideCtx, { checkNetwork: !!params.options.checkNetwork });
+      overrideFindings = overrideAudit.findings;
+    }
+
     results.push({
       subfolder,
       scanInput,
@@ -67,6 +84,7 @@ export async function runMultiFolderScan(params: {
       minSeverity,
       tableFindings,
       allPackages: scanInput.packages,
+      overrideFindings,
     });
   }
 
@@ -107,10 +125,24 @@ export async function handleMultiFolderScan(params: {
       multiFolder: true,
       folders: results.map(r => r.subfolder),
       findings: allFindings,
+      ...(params.options.checkOverrides
+        ? {
+            overrideFindings: results.flatMap(r =>
+              r.overrideFindings.map(f => ({ ...f, subfolder: r.subfolder })),
+            ),
+          }
+        : {}),
       scannedAt: new Date().toISOString(),
     }, null, 2));
   } else {
     printMultiFolderResults(results, params.options);
+    if (params.options.checkOverrides) {
+      const { renderOverrideFindings } = await import("../output/formatters.js");
+      for (const r of results) {
+        process.stdout.write(`\n${chalk.bold.cyan(`📁 ${r.subfolder}/`)} ${chalk.gray("override hygiene")}\n`);
+        console.log(renderOverrideFindings(r.overrideFindings));
+      }
+    }
   }
 
   if (params.options.report) {

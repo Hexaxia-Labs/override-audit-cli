@@ -10,6 +10,11 @@ All notable changes to CVE Lite CLI will be documented in this file.
 - `cve-lite [path] --fix` now also runs the override hygiene fix-and-verify hook after the CVE fixes complete: it applies fixable override findings, then re-audits the just-touched packages (OA001/OA008) to confirm no vulnerable copy remains nested under a parent dependency.
 - Exit code `2` is reserved for a post-`--fix` verify failure ("the fix ran but did not take"), operationally distinct from exit `1` (findings present at or above `--fail-on`) and exit `3` (tool error).
 - `--audit-log <path>` (also via `CVE_LITE_AUDIT_LOG`) streams override detection and fix events as an NDJSON change-control log.
+- Override hygiene integrates with the multi-folder scan: `--check-overrides` now runs a per-folder override audit when scanning a workspace with no root lockfile, surfacing findings per folder in both terminal and `--json` output.
+- Override hygiene fixes participate in `--create-pr`: the override-fix `package.json` edits are included in the pull request (and a PR is opened even when only override fixes were applied, with the title and body describing them).
+
+### Changed
+- Override hygiene is explicitly independent of the `--ratchet` CVE baseline: a `--ratchet` run never records override findings, and `--ratchet --check-overrides` prints a note pointing to `cve-lite overrides` for a standalone audit.
 
 ### Fixed
 - OA006 (coupled platform binary) no longer false-positives on flat overrides that are actually effective. It now consults the materialized `node_modules` tree before firing (like OA008): when the override target is installed at a version that satisfies the override, the override demonstrably won and OA006 stays silent instead of proposing a harmful parent force-pin. This cleared a false `medium` on the common "every Next.js project needs a flat `postcss` override" pattern (#37).

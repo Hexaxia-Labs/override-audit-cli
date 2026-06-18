@@ -74,6 +74,29 @@ describe("create-pr helpers", () => {
     expect(body).toContain("Findings before fix: **2**");
     expect(body).toContain("Findings after fix: **1**");
     expect(body).not.toContain("Closes #367");
+    expect(body).not.toContain("Override hygiene");
+  });
+
+  it("includes an override hygiene section when override fixes were applied", () => {
+    const body = buildPullRequestBody({
+      fixResult: {
+        appliedFixCount: 1,
+        skippedCount: 0,
+        skippedTransitiveCount: 0,
+        skippedNoValidatedTargetCount: 0,
+        applied: [{ package: "lodash", from: "4.17.20", to: "4.17.21" }],
+        note: null,
+      },
+      findingsBeforeFix: [createFinding()],
+      findingsAfterFix: [],
+      overrideFixCount: 2,
+    });
+    expect(body).toContain("Override hygiene");
+    expect(body).toContain("**2** override hygiene");
+  });
+
+  it("builds an override-only title when no CVE fixes were applied", () => {
+    expect(buildPullRequestTitle(0, [], 3)).toContain("override hygiene");
   });
 
   it("checks fail-on threshold against initial findings", () => {

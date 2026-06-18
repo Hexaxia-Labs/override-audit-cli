@@ -12,7 +12,7 @@
  * EXIT_VERIFY_FAILED=2, EXIT_ERROR=3.
  */
 
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli, mkProject, rmProject, npmProject } from "./harness.js";
@@ -61,6 +61,27 @@ describe("commands + meta", () => {
       const r = runCli([dir, "--offline"]);
       expect(r.status).toBe(0);
       expect(r.stdout).toMatch(/No known vulnerabilities/i);
+    } finally {
+      rmProject(dir);
+    }
+  });
+
+  it("--ratchet --check-overrides keeps override hygiene out of the baseline and notes the boundary", () => {
+    const dir = mkProject(
+      npmProject({ name: "ratchet-app", overrides: { gone: "1.0.0" } }, { lodash: "4.17.21" }),
+    );
+    try {
+      const r = runCli([dir, "--offline", "--ratchet", "--check-overrides"]);
+      expect(r.status).toBe(0);
+      // Baseline written for CVE findings...
+      expect(existsSync(join(dir, ".cve-lite", "baseline.json"))).toBe(true);
+      // ...and the override boundary is stated explicitly.
+      expect(r.stdout).toMatch(/not part of the ratchet baseline/i);
+      // The override audit (OA001 orphan 'gone') must NOT leak into the baseline file.
+      const baseline = JSON.parse(readFileSync(join(dir, ".cve-lite", "baseline.json"), "utf8"));
+      const serialized = JSON.stringify(baseline);
+      expect(serialized).not.toContain("OA001");
+      expect(serialized).not.toContain("gone");
     } finally {
       rmProject(dir);
     }
