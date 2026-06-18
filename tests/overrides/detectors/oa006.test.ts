@@ -1,5 +1,5 @@
 import { detect } from '../../../src/overrides/detectors/oa006-coupled-platform-binary.js';
-import type { OverrideContext, OverrideEntry, ParentDeclaration } from '../../../src/overrides/context.js';
+import type { OverrideContext, OverrideEntry, ParentDeclaration, InstalledCopy } from '../../../src/overrides/context.js';
 import { NULL_AUDIT_LOG } from '../../../src/audit-log/index.js';
 
 const noopLogger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as any;
@@ -8,6 +8,7 @@ function ctxOf(
   entries: OverrideEntry[],
   parentDecls: Record<string, ParentDeclaration[]> = {},
   installedVersions: [string, string][] = [],
+  installedCopies: Record<string, InstalledCopy[]> = {},
 ): OverrideContext {
   return {
     projectPath: '/x',
@@ -17,7 +18,7 @@ function ctxOf(
     overrideEntries: entries,
     lockfilePackageNames: new Set(entries.map(e => e.packageName)),
     installedVersions: new Map(installedVersions),
-    installedCopies: new Map(),
+    installedCopies: new Map(Object.entries(installedCopies)),
     parentDeclarations: new Map(Object.entries(parentDecls)),
     registryDistTags: new Map(),
     skippedDetectors: [],
@@ -25,6 +26,12 @@ function ctxOf(
     logger: noopLogger,
   };
 }
+
+const copy = (name: string, version: string): InstalledCopy => ({
+  name,
+  path: `/x/node_modules/${name}`,
+  version,
+});
 
 const e = (name: string, value: string): OverrideEntry => ({
   key: name,
@@ -126,7 +133,9 @@ describe('OA006-COUPLED-PLATFORM-BINARY', () => {
     });
   });
 
-  it('flags non-platform-binary target at MEDIUM severity (currently effective, but fragile)', () => {
+  it('flags non-platform-binary target at MEDIUM severity when no installed copy confirms the override', () => {
+    // No node_modules evidence (installedCopies empty): the override is not confirmed
+    // effective, so OA006 fires. The message must not claim the override is effective.
     const ctx = ctxOf(
       [e('postcss', '^8.5.15')],
       { postcss: [exactParent('next', '16.2.6', '8.4.31')] },
@@ -138,7 +147,8 @@ describe('OA006-COUPLED-PLATFORM-BINARY', () => {
       severity: 'medium',
       package: { name: 'postcss' },
     });
-    expect(findings[0]!.message).toContain('fragile');
+    expect(findings[0]!.message).toContain('not confirmed');
+    expect(findings[0]!.message).not.toContain('effective, but');
     expect(findings[0]!.details).toContain('next');
   });
 
@@ -172,6 +182,35 @@ describe('OA006-COUPLED-PLATFORM-BINARY', () => {
     const op = findings[0]!.fix!.patch[0]!;
     expect(op.op).toBe('relocate');
     expect(op.op === 'relocate' && op.floor).toBe('>=0.28.0');
+  });
+
+  it('does NOT flag when a materialized copy already satisfies the override (override won on disk)', () => {
+    // The postcss-under-Next pattern (issue #37): next exact-pins postcss to 8.4.31,
+    // but node_modules/postcss is 8.5.15 - the flat override won. OA006 must not cry
+    // wolf, and must not propose the harmful relocate-to-next fix.
+    const ctx = ctxOf(
+      [e('postcss', '^8.5.15')],
+      { postcss: [exactParent('next', '16.2.6', '8.4.31')] },
+      [],
+      { postcss: [copy('postcss', '8.5.15')] },
+    );
+    expect(detect(ctx)).toEqual([]);
+  });
+
+  it('still flags when a materialized copy is below the override floor (parent won on disk)', () => {
+    // Genuine coupling: the override asked for 0.25.12 but the parent's exact pin
+    // kept 0.18.0 on disk. This is the real OA006 case - keep firing (OA008 also
+    // fires here and the composite pass escalates to high).
+    const ctx = ctxOf(
+      [e('@esbuild/linux-x64', '0.25.12')],
+      { '@esbuild/linux-x64': [exactParent('esbuild', '0.18.0', '0.18.0')] },
+      [],
+      { '@esbuild/linux-x64': [copy('@esbuild/linux-x64', '0.18.0')] },
+    );
+    const findings = detect(ctx);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.ruleId).toBe('OA006');
+    expect(findings[0]!.severity).toBe('high');
   });
 
   it('does not crash on nested-object overrides (skips them - OA005)', () => {

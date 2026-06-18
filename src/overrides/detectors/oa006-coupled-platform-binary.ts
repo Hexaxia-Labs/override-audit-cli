@@ -1,7 +1,7 @@
 import type { OverrideContext, ParentDeclaration, OverrideEntry } from '../context.js';
 import type { OverrideFinding } from '../types.js';
 import { jsonPointer } from '../parsing/json-pointer.js';
-import { compareVersions, looksLikeVersion } from '../../utils/version.js';
+import { compareVersions, looksLikeVersion, satisfiesRange, isValidRange } from '../../utils/version.js';
 import { looksLikePlatformBinary } from './platform-binary.js';
 
 const RULE_ID = 'OA006' as const;
@@ -39,6 +39,16 @@ export function detect(ctx: OverrideContext): OverrideFinding[] {
     // staleness from another angle.
     const allParentsAgree = exactParents.every(p => p.declaredValue === pinValue);
     if (allParentsAgree) continue;
+
+    // Consult the materialized tree before firing, like OA008 (issue #37). If the
+    // override target is installed at a version that satisfies the override pin, the
+    // override demonstrably won resolution on disk - it is effective, not fragile,
+    // and the relocate-to-parent fix would be harmful (it force-pins the framework
+    // to clear a non-problem). This is the documented "every Next project needs a
+    // flat postcss override" pattern. Suppress. The genuine coupling case - parent's
+    // exact pin wins, leaving a below-floor copy on disk - is not satisfied here, so
+    // it still fires (and OA008 fires in parallel; the composite pass escalates).
+    if (overrideWonOnDisk(ctx, entry.packageName, pinValue)) continue;
 
     // Pick the most-cited parent to suggest as the override target. Ties broken
     // by first declared version (deterministic across runs).
@@ -86,13 +96,14 @@ export function detect(ctx: OverrideContext): OverrideFinding[] {
       location: { file: 'package.json', jsonPath: jsonPointer(entry.path) },
       message: isPlatform
         ? 'Override on platform binary fights an exact-pinned parent'
-        : 'Override fights an exact-pinned parent (currently effective, but fragile)',
+        : 'Override fights an exact-pinned parent (effect not confirmed on disk)',
       details:
         `${entry.packageName} is overridden to "${pinValue}", but its installed parent ` +
         `${parentChoice.parentName}@${parentChoice.parentVersion} declares it as exact ` +
         `(${parentChoice.declaredIn}: "${parentChoice.declaredValue}"). ` +
-        `The override cannot replace the parent's pin - npm/pnpm will keep the parent's ` +
-        `exact version on disk. Override the parent instead.`,
+        `No installed copy confirms the override took; if the parent's exact pin wins ` +
+        `resolution, npm/pnpm keep that version on disk and the override does nothing. ` +
+        `Override the parent instead.`,
       fix: {
         type: 'rfc6902',
         patch: patches,
@@ -106,6 +117,36 @@ export function detect(ctx: OverrideContext): OverrideFinding[] {
   }
 
   return findings;
+}
+
+/**
+ * True when the override target has at least one materialized copy and EVERY
+ * materialized copy satisfies the override pin - i.e. the override won resolution
+ * on disk. Mirrors OA008's materialization check. Returns false when there is no
+ * installed evidence (cannot prove the override won) or the pin is not a
+ * comparable range/version (floating tags are OA002's territory).
+ */
+function overrideWonOnDisk(ctx: OverrideContext, packageName: string, pinValue: string): boolean {
+  if (!isCheckableFloor(pinValue)) return false;
+  const copies = ctx.installedCopies.get(packageName) ?? [];
+  if (copies.length === 0) return false;
+  return copies.every(c => copySatisfiesPin(c.version, pinValue));
+}
+
+/**
+ * A single installed copy is consistent with the override pin. Unlike OA008 (which
+ * treats the pin as a security FLOOR), OA006 asks "did the override take?" - so a
+ * concrete pin is a degenerate exact range. If the parent forces a different version
+ * (even a higher one), the override did not win and OA006 should still fire.
+ */
+function copySatisfiesPin(version: string, pinValue: string): boolean {
+  return looksLikeVersion(version) && satisfiesRange(version, pinValue);
+}
+
+/** The pin is a comparable semver range/version (excludes tags and workspace/file/link). */
+function isCheckableFloor(value: string): boolean {
+  if (value.startsWith('workspace:') || value.startsWith('file:') || value.startsWith('link:')) return false;
+  return isValidRange(value);
 }
 
 function chooseParent(parents: ParentDeclaration[]): ParentDeclaration {

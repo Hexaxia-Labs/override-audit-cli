@@ -37,11 +37,15 @@ function readNdjson(path: string): Array<Record<string, unknown>> {
 }
 
 /**
- * Project that triggers OA006 (coupled platform binary): an override on a
- * platform binary whose exact-pinned parent (esbuild) is installed under
- * node_modules. The override value is a concrete version (not a floating tag)
- * so OA002 stays silent and OA006 is the only finding - isolating the tier-2
- * (proposed) relocate fix.
+ * Project that triggers OA006 (coupled platform binary) in isolation. The override
+ * pins @esbuild/linux-x64 to 0.25.0, but its installed parent esbuild@0.25.12
+ * exact-pins the binary to 0.25.12. node_modules exists (esbuild is installed, so the
+ * detector is not pre-skipped) but the optional platform binary itself is NOT
+ * materialized - the common wrong-platform case - so there is no on-disk proof the
+ * override took. OA006 fires on the latent coupling. Per issue #37 it suppresses only
+ * when a materialized copy actually satisfies the override; with the binary absent,
+ * OA004 (needs a surpassing installed version) and OA008 (needs a below-floor copy)
+ * both stay silent, isolating the tier-2 (proposed) relocate fix.
  */
 function makeOa006Project(): string {
   const dir = mkProject(
@@ -54,10 +58,6 @@ function makeOa006Project(): string {
     name: "esbuild",
     version: "0.25.12",
     optionalDependencies: { "@esbuild/linux-x64": "0.25.12" },
-  });
-  installedManifest(dir, "@esbuild/linux-x64", {
-    name: "@esbuild/linux-x64",
-    version: "0.25.0",
   });
   return dir;
 }

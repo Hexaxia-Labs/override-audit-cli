@@ -11,6 +11,9 @@ All notable changes to CVE Lite CLI will be documented in this file.
 - Exit code `2` is reserved for a post-`--fix` verify failure ("the fix ran but did not take"), operationally distinct from exit `1` (findings present at or above `--fail-on`) and exit `3` (tool error).
 - `--audit-log <path>` (also via `CVE_LITE_AUDIT_LOG`) streams override detection and fix events as an NDJSON change-control log.
 
+### Fixed
+- OA006 (coupled platform binary) no longer false-positives on flat overrides that are actually effective. It now consults the materialized `node_modules` tree before firing (like OA008): when the override target is installed at a version that satisfies the override, the override demonstrably won and OA006 stays silent instead of proposing a harmful parent force-pin. This cleared a false `medium` on the common "every Next.js project needs a flat `postcss` override" pattern (#37).
+
 ### Docs
 - README documents the `overrides` subcommand, the post-`--fix` verify pass, and the exit-code contract.
 - Override-hygiene rule reference under `docs/rules/` (`OA001`-`OA008`) and a programmatic API reference at `docs/api/overrides.md`.
