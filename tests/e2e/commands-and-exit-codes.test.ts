@@ -87,6 +87,31 @@ describe("commands + meta", () => {
     }
   });
 
+  it("multi-folder scan with --check-overrides surfaces per-folder override hygiene", () => {
+    // No root lockfile + two nested lockfiles triggers multi-folder mode. Each
+    // nested package overrides a package absent from its lockfile -> OA001 orphan.
+    const dir = mkProject({
+      "packages/a/package.json": { name: "a", overrides: { ghostpkg: "1.0.0" } },
+      "packages/a/package-lock.json": { lockfileVersion: 3, packages: { "": { name: "a" }, "node_modules/lodash": { version: "4.17.21" } } },
+      "packages/b/package.json": { name: "b", overrides: { phantompkg: "1.0.0" } },
+      "packages/b/package-lock.json": { lockfileVersion: 3, packages: { "": { name: "b" }, "node_modules/lodash": { version: "4.17.21" } } },
+    });
+    try {
+      const r = runCli([dir, "--offline", "--check-overrides", "--json"]);
+      const out = JSON.parse(r.stdout);
+      expect(out.multiFolder).toBe(true);
+      expect(Array.isArray(out.overrideFindings)).toBe(true);
+      expect(out.overrideFindings.map((f: any) => f.ruleId)).toContain("OA001");
+      // Both folders' overrides are audited, each finding tagged with its subfolder.
+      const byPkg = new Map(out.overrideFindings.map((f: any) => [f.package.name, f.subfolder]));
+      expect(byPkg.has("ghostpkg")).toBe(true);
+      expect(byPkg.has("phantompkg")).toBe(true);
+      expect(byPkg.get("ghostpkg")).not.toBe(byPkg.get("phantompkg"));
+    } finally {
+      rmProject(dir);
+    }
+  });
+
   it("overrides <clean project> --json exits 0 with a findings array", () => {
     const dir = mkProject(npmProject({ name: "x" }, { lodash: "4.17.21" }));
     try {
