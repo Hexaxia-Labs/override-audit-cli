@@ -40,7 +40,8 @@ Running `--report` to the same directory a second time overwrites both files.
 
 **Findings table** with interactive controls:
 - Filter by severity or direct-only
-- Expandable rows showing vulnerability description, dependency path, and recommended action
+- Expandable rows showing vulnerability description, contextual risk summary,
+  next action, dependency path, and recommended action
 - CVE / GHSA advisory IDs linked to osv.dev and GitHub Security Advisories
 - Fix version shown inline when one is available
 

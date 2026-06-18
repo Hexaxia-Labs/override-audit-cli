@@ -36,6 +36,9 @@ const installSkillMock = jest.fn<any>();
 const writeSarifReportMock = jest.fn<any>(() => "cve-lite-scan-test.sarif");
 const deriveLockfileUriMock = jest.fn<any>(() => "package-lock.json");
 const writeOutputsMock = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
+const hasRootLockfileMock = jest.fn<any>(() => true);
+const findNestedLockfilesMock = jest.fn<any>(() => []);
+const handleMultiFolderScanMock = jest.fn<any>();
 
 jest.unstable_mockModule("../src/cli/help.js", () => ({
   printBanner: printBannerMock,
@@ -79,13 +82,12 @@ jest.unstable_mockModule("../src/advisory/osv-sync.js", () => ({
 }));
 
 jest.unstable_mockModule("../src/output/formatters.js", () => ({
-  formatAdvisorySourceLine: (value: string) => value,
+  formatAdvisorySourceLine: jest.fn<any>((sourceLabel: string) => sourceLabel),
   logInfo: logInfoMock,
   logWarn: logWarnMock,
   printCacheSummary: printCacheSummaryMock,
   serializeFinding: serializeFindingMock,
   sortFindingsForOutput: sortFindingsForOutputMock,
-  formatAdvisorySourceLine: jest.fn<any>(sourceLabel => sourceLabel),
   getRecommendedAction: jest.fn<any>(() => "Upgrade to latest"),
 }));
 
@@ -113,6 +115,20 @@ jest.unstable_mockModule("node:child_process", () => ({
 jest.unstable_mockModule("../src/output/html-reporter.js", () => ({
   buildReportData: buildReportDataMock,
   writeHtmlReport: writeHtmlReportMock,
+  REPORT_STYLES: "",
+  escapeHtml: jest.fn<any>((s: string) => s),
+  renderFindingRow: jest.fn<any>(() => ""),
+  renderFixPlan: jest.fn<any>(() => ""),
+  openInBrowser: jest.fn<any>(),
+}));
+
+jest.unstable_mockModule("../src/parsers/multi-package.js", () => ({
+  hasRootLockfile: hasRootLockfileMock,
+  findNestedLockfiles: findNestedLockfilesMock,
+}));
+
+jest.unstable_mockModule("../src/scan/multi-folder-scan.js", () => ({
+  handleMultiFolderScan: handleMultiFolderScanMock,
 }));
 
 jest.unstable_mockModule("../src/skills/install.js", () => ({
@@ -592,6 +608,47 @@ describe("CLI integration", () => {
     expect(printTableMock).toHaveBeenCalled();
     expect(printFinalStatusMock).toHaveBeenCalled();
     expect(printCompactOutputMock).not.toHaveBeenCalled();
+    // blank separator line before scan output should be present
+    expect(result.stdout).toContain("");
+  });
+
+  it("routes to multi-folder scan when no root lockfile and 2+ nested lockfiles found", async () => {
+    hasRootLockfileMock.mockReturnValue(false);
+    findNestedLockfilesMock.mockReturnValue([
+      "/project/sessionManager/package-lock.json",
+      "/project/apiServer/package-lock.json",
+    ]);
+    // real handleMultiFolderScan always calls process.exit; mirror that in the mock
+    handleMultiFolderScanMock.mockImplementation(async () => { process.exit(0); });
+
+    const result = await runIndexModule();
+
+    expect(result.exitCode).toBe(0);
+    expect(handleMultiFolderScanMock).toHaveBeenCalledTimes(1);
+    expect(loadPackagesMock).not.toHaveBeenCalled();
+  });
+
+  it("does not route to multi-folder scan when a root lockfile exists", async () => {
+    hasRootLockfileMock.mockReturnValue(true);
+    findNestedLockfilesMock.mockReturnValue([
+      "/project/sessionManager/package-lock.json",
+      "/project/apiServer/package-lock.json",
+    ]);
+    loadPackagesMock.mockReturnValue(createScanInput());
+
+    await runIndexModule();
+
+    expect(handleMultiFolderScanMock).not.toHaveBeenCalled();
+  });
+
+  it("does not route to multi-folder scan when only 1 nested lockfile found", async () => {
+    hasRootLockfileMock.mockReturnValue(false);
+    findNestedLockfilesMock.mockReturnValue(["/project/sessionManager/package-lock.json"]);
+    loadPackagesMock.mockReturnValue(createScanInput());
+
+    await runIndexModule();
+
+    expect(handleMultiFolderScanMock).not.toHaveBeenCalled();
   });
 
   it("reports the local advisory database as the scan source in offline mode", async () => {
@@ -846,6 +903,25 @@ describe("CLI integration", () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr.join("\n")).toContain("--fix cannot be used with --json");
+  });
+
+  it("fails fast when --create-pr is used without --fix", async () => {
+    parseArgsMock.mockReturnValue({
+      command: "scan",
+      options: {
+        createPr: true,
+        failOn: "critical",
+        batchSize: "100",
+        searchDepth: "4",
+        minSeverity: "medium",
+      },
+      projectArg: ".",
+    });
+
+    const result = await runIndexModule();
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr.join("\n")).toContain("--create-pr requires --fix");
   });
 
   it("throws when --no-cache is used with --offline", async () => {

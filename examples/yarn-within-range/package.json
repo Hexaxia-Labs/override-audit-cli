@@ -1,0 +1,10 @@
+{
+  "name": "yarn-within-range",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal Yarn Classic fixture: deep transitive within-range remediation should suggest yarn upgrade js-cookie.",
+  "license": "ISC",
+  "devDependencies": {
+    "aws-amplify": "6.16.3"
+  }
+}

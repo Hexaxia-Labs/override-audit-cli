@@ -78,6 +78,18 @@ describe("validateOptions", () => {
     });
   });
 
+  describe("--ca-cert validation", () => {
+    it("throws with a --ca-cert: prefix when the cert file does not exist or is invalid", () => {
+      expect(() => validateOptions(opts({ caCert: "invalid-fake-cert.pem" }))).toThrow(
+        "--ca-cert:"
+      );
+    });
+
+    it("does not throw when --ca-cert is not set", () => {
+      expect(() => validateOptions(opts({}))).not.toThrow();
+    });
+  });
+
   it("does not throw for a valid set of options", () => {
     expect(() => validateOptions(opts({ fix: true, verbose: true }))).not.toThrow();
   });

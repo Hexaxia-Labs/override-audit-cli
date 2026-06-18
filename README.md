@@ -1,5 +1,5 @@
 
-[![OWASP Incubator Project](https://img.shields.io/badge/OWASP-Incubator%20Project-48A646?logo=owasp)](https://owasp.org/cve-lite-cli)
+[![OWASP Lab Project](https://img.shields.io/badge/OWASP-Lab%20Project-48A646?logo=owasp)](https://owasp.org/cve-lite-cli)
 [![npm version](https://img.shields.io/npm/v/cve-lite-cli)](https://www.npmjs.com/package/cve-lite-cli)
 [![npm downloads](https://img.shields.io/npm/dm/cve-lite-cli)](https://www.npmjs.com/package/cve-lite-cli)
 [![CI](https://img.shields.io/github/actions/workflow/status/OWASP/cve-lite-cli/ci.yml?branch=main)](https://github.com/OWASP/cve-lite-cli/actions)
@@ -15,7 +15,7 @@
 
   <h1>CVE Lite CLI</h1>
 
-  **🏆 Officially recognized as an [OWASP Incubator Project](https://owasp.org/cve-lite-cli)**
+  **🏆 Officially recognized as an [OWASP Lab Project](https://owasp.org/cve-lite-cli)**
 
   <p>Vulnerability scanning that belongs in your terminal — not your CI pipeline.<br/>Scan your lockfile, get copy-and-run fix commands, and ship clean code.</p>
 
@@ -25,7 +25,7 @@
 
   <table>
     <tr>
-      <td align="center" width="33%"><p>🏆</p><strong>OWASP Incubator Project</strong><br/><sub>Peer-reviewed by the org behind the OWASP Top 10 —<br/>the security standard followed by millions of developers</sub></td>
+      <td align="center" width="33%"><p>🏆</p><strong>OWASP Lab Project</strong><br/><sub>Peer-reviewed by the org behind the OWASP Top 10 —<br/>the security standard followed by millions of developers</sub></td>
       <td align="center" width="33%"><p>🎯</p><strong>Remediation-first</strong><br/><sub>Validated fix commands + parent-aware<br/>transitive guidance — not just CVE IDs</sub></td>
       <td align="center" width="33%"><p>🔒</p><strong>Runs locally</strong><br/><sub>Nothing leaves your machine — not your<br/>code, not your dependency tree</sub></td>
     </tr>
@@ -174,7 +174,7 @@ CVE Lite CLI fits at every stage of the development workflow, not just CI.
 
 CVE Lite CLI scans its own dependencies in CI. See [`self-scan.yml`](https://github.com/OWASP/cve-lite-cli/blob/main/.github/workflows/self-scan.yml).
 
-For full CI patterns including offline workflows, git hooks, and scripted automation, see the [CI and Workflow Integration guide](https://owasp.org/cve-lite-cli/docs/ci-integration).
+For full CI patterns including offline workflows, git hooks, and scripted automation, see the [CI and Workflow Integration guide](https://owasp.org/cve-lite-cli/docs/workflow-integration).
 
 ## How it compares
 
@@ -188,9 +188,13 @@ No other free tool combines all of the following: lockfile scanning across npm, 
 | Free to use | ✅ | ✅ | ✅ | ❌ | ❌ |
 | Usage-aware reachability scanning | ✅ | ❌ | ❌ | ✅ | ⚠️ |
 | Direct vs transitive visibility | ✅ | ⚠️ | ✅ | ✅ | ✅ |
+| Dev vs runtime dependency labelling | ✅ | ⚠️ | ❌ | ⚠️ | ❌ |
 | Copy-and-run fix commands | ✅ | ❌ | ❌ | ✅ | ⚠️ |
 | Transitive parent update guidance | ✅ | ❌ | ⚠️ | ⚠️ | ⚠️ |
 | Suggested remediation plan | ✅ | ❌ | ⚠️ | ✅ | ⚠️ |
+| Ratcheting mode (baseline suppression) | ✅ | ❌ | ❌ | ⚠️ | ❌ |
+| Interactive HTML report | ✅ | ❌ | ❌ | ✅ | ❌ |
+| SARIF / GitHub Code Scanning output | ✅ | ❌ | ✅ | ✅ | ❌ |
 | JSON output | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Offline/local advisory DB | ✅ | ❌ | ⚠️ | ❌ | ❌ |
 
@@ -214,9 +218,21 @@ CVE Lite CLI has been evaluated against real open-source projects to verify that
 - [Astro](https://owasp.org/cve-lite-cli/docs/case-studies/astro) — verified baseline scan of a modern pnpm monorepo (2,228 packages, 34 findings at revision `221bb4b`) with a critical transitive SDK chain and four generated fix command groups
 - [Turborepo](https://owasp.org/cve-lite-cli/docs/case-studies/turborepo) — verified baseline scan of a build-system pnpm monorepo (1,776 packages, 13 findings at revision `c85d410`) with a critical no-fix sandbox beta, all-transitive risk, and zero auto-generated fix commands on this snapshot
 - [Visual Studio Code](https://owasp.org/cve-lite-cli/docs/case-studies/vscode) — verified baseline scan of the VS Code root npm lockfile (1,374 packages, 9 findings at revision `bc678ca`) with two direct Anthropic SDK advisories, a high-severity gulp toolchain chain, and two generated fix command groups
+- [Gatsby](https://owasp.org/cve-lite-cli/docs/case-studies/gatsby) — verified baseline scan of a Yarn Classic monorepo (3,568 packages, 128 findings at revision `1f38c85`) with five direct findings, critical transitive template-engine chains, and CVE Lite vs `yarn audit` deduplication
+- [Vercel AI SDK](https://owasp.org/cve-lite-cli/docs/case-studies/vercel-ai-sdk) — verified baseline scan of the [vercel/ai](https://github.com/vercel/ai) pnpm monorepo (3,570 packages, 55 findings at revision `3215032`) with three direct findings (`next`, `turbo`) and five workspace-scoped fix command groups — distinct from the Turborepo snapshot
+- [Mastra](https://owasp.org/cve-lite-cli/docs/case-studies/mastra) — verified baseline scan of an AI agent framework pnpm monorepo (4,555 packages, 64 findings at revision `e9d54b2`) with four direct findings, two command groups, and workspace-scoped `pnpm add --filter playground` fixes
+- [Lit](https://owasp.org/cve-lite-cli/docs/case-studies/lit) — verified baseline scan of an npm workspaces monorepo (2,059 packages, 99 findings at revision `20afabd`) with three direct `rollup` majors and workspace-scoped upgrade commands (13 first-pass fixes, 4 command groups)
+- [LangChain.js](https://owasp.org/cve-lite-cli/docs/case-studies/langchainjs) — verified baseline scan of a pnpm LLM-framework monorepo (2,174 packages, 13 findings at revision `1503c9b`) with a lean-graph profile, three high-severity findings with validated fix targets, and a malicious-package advisory on OpenSearch integration paths
+- [OpenAI Agents SDK (JavaScript)](https://owasp.org/cve-lite-cli/docs/case-studies/openai-agents-js) — verified baseline scan of a pnpm AI-agent monorepo (1,683 packages, 31 findings at revision `f76fc19`) with 0 direct findings, MCP/Daytona parent clusters, and one generated `verdaccio` parent-upgrade command
+- [n8n](https://owasp.org/cve-lite-cli/docs/case-studies/n8n) — verified baseline scan of a workflow automation pnpm monorepo (3,746 packages, 32 findings at revision `e2e0394`) with one direct `turbo` fix, four command groups, and email/editor transitive clusters
+- [CamoFox Browser](https://owasp.org/cve-lite-cli/docs/case-studies/camofox-browser) — verified baseline scan of an AI agent browser automation npm graph (435 packages, 2 findings at revision `ce3a3b0`) with dual `qs` fix strategies — within-range `npm update qs` and parent `npm install express@4.22.2`
 - [Storybook](https://owasp.org/cve-lite-cli/docs/case-studies/storybook) — verified baseline scan of a Yarn Berry monorepo (3,008 packages, 92 findings at revision `cc19ae1`) spanning cross-framework sandbox templates, five critical transitive chains, and one direct vite fix command
+- [Twenty](https://owasp.org/cve-lite-cli/docs/case-studies/twenty) — verified baseline scan of an open-source CRM Yarn Berry monorepo (5,451 packages, 105 findings at revision `fc90b4b`) with 0 direct findings, six critical test-stack chains, and four Nx parent-upgrade command groups
+- [Strapi](https://owasp.org/cve-lite-cli/docs/case-studies/strapi) — verified baseline scan of a headless CMS Yarn Berry monorepo (2,887 packages, 18 findings) with two direct findings (`lodash`, `qs`) and mixed transitive remediation paths
+- [Payload CMS](https://owasp.org/cve-lite-cli/docs/case-studies/payload) — verified baseline scan of a TypeScript-first headless CMS pnpm monorepo (2,602 packages, 18 findings) with one direct finding and workspace-scoped fix commands
+- [Presenton](https://owasp.org/cve-lite-cli/docs/case-studies/presenton) — verified baseline scan of an AI presentation generator with dual npm lockfiles (root + Electron shell), demonstrating multi-lockfile coverage across 9 findings
 
-In-repo lockfile fixtures for Astro, Turborepo, Visual Studio Code, and Storybook live under [`examples/`](examples/readme.md) — clone the repo and scan immediately without downloading full upstream checkouts.
+In-repo lockfile fixtures for Astro, Turborepo, Visual Studio Code, Gatsby, Vercel AI SDK, Mastra, Lit, LangChain.js, OpenAI Agents JS, n8n, CamoFox Browser, Storybook, Twenty, Strapi, Payload CMS, and Presenton live under [`examples/`](examples/readme.md) — clone the repo and scan immediately without downloading full upstream checkouts.
 
 These are not demos. They are documented scans against real codebases with real findings, recorded before and after applying fix commands.
 
@@ -240,7 +256,7 @@ If you maintain an open-source JavaScript or TypeScript project and want CVE Lit
 
 OWASP (Open Web Application Security Project) is the globally recognized nonprofit behind the security standards followed by millions of developers worldwide — most notably the [OWASP Top 10](https://owasp.org/www-project-top-ten/), the most widely cited web application security reference in the industry. Organizations from startups to Fortune 500 companies use OWASP guidelines as the foundation of their security programs.
 
-CVE Lite CLI is an [OWASP Incubator Project](https://owasp.org/cve-lite-cli) — reviewed and accepted by the OWASP community as a vendor-neutral, open source security tool. Being part of OWASP means:
+CVE Lite CLI is an [OWASP Lab Project](https://owasp.org/cve-lite-cli) — reviewed and accepted by the OWASP community as a vendor-neutral, open source security tool. Being part of OWASP means:
 
 - **Peer-reviewed** by security professionals
 - **Community-driven** development and governance
@@ -476,7 +492,7 @@ It is a good fit for:
 - **Enterprise teams with restricted networks** — offline advisory DB removes the need for runtime outbound calls during scans
 - **Teams running npm, pnpm, Yarn, and Bun** — unified scanning across all four package managers in one tool
 
-See the [CI and Workflow Integration guide](https://owasp.org/cve-lite-cli/docs/ci-integration) for concrete patterns across these scenarios.
+See the [CI and Workflow Integration guide](https://owasp.org/cve-lite-cli/docs/workflow-integration) for concrete patterns across these scenarios.
 
 Using CVE Lite CLI at your company or in your projects? [Share your use case in the community thread](https://github.com/OWASP/cve-lite-cli/discussions/481) - we'd love to hear about it.
 
@@ -524,7 +540,7 @@ npm run build
 
 ## Governance
 
-CVE Lite CLI is an OWASP Incubator Project maintained by Sonu Kapoor as project lead. The project follows a single-maintainer (benevolent dictator) governance model. The project lead makes final decisions on scope, design direction, and releases after considering input from contributors and the wider community.
+CVE Lite CLI is an OWASP Lab Project maintained by Sonu Kapoor as project lead. The project follows a single-maintainer (benevolent dictator) governance model. The project lead makes final decisions on scope, design direction, and releases after considering input from contributors and the wider community.
 
 ### Roles
 
@@ -595,6 +611,22 @@ For security-related reporting: [SECURITY.md](https://github.com/OWASP/cve-lite-
 This project follows a [Code of Conduct](https://github.com/OWASP/cve-lite-cli/blob/main/CODE_OF_CONDUCT.md). Please review it before participating.
 
 If CVE Lite CLI helps your release workflow, a [GitHub star](https://github.com/OWASP/cve-lite-cli) helps more developers find it.
+
+## Contributors
+
+Thanks to everyone who helps improve CVE Lite CLI — issues, pull requests, documentation, case studies, and real-world lockfile feedback all count.
+
+<p align="center">
+  <a href="https://github.com/OWASP/cve-lite-cli/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=OWASP/cve-lite-cli" alt="Contributors to OWASP/cve-lite-cli" />
+  </a>
+</p>
+
+<p align="center">
+  <sub>Avatar grid generated from the <a href="https://github.com/OWASP/cve-lite-cli/graphs/contributors">GitHub contributors graph</a> via <a href="https://contrib.rocks">contrib.rocks</a>.</sub>
+</p>
+
+New here? See [CONTRIBUTING.md](https://github.com/OWASP/cve-lite-cli/blob/main/src/docs/CONTRIBUTING.md) to get started, and review the [Code of Conduct](https://github.com/OWASP/cve-lite-cli/blob/main/CODE_OF_CONDUCT.md) before participating.
 
 ---
 

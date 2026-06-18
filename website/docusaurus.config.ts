@@ -2,7 +2,7 @@ import {themes as prismThemes} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
-const latestVersion = 'v1.18.2';
+const latestVersion = 'v1.24.0';
 
 const config: Config = {
   title: 'CVE Lite CLI',
@@ -21,10 +21,12 @@ const config: Config = {
 
   onBrokenLinks: 'throw',
   markdown: {
+    mermaid: true,
     hooks: {
       onBrokenMarkdownLinks: 'warn',
     },
   },
+  themes: ['@docusaurus/theme-mermaid'],
 
   i18n: {
     defaultLocale: 'en',
@@ -199,7 +201,7 @@ const config: Config = {
           ],
         },
       ],
-      copyright: `CVE Lite CLI is MIT licensed, built in public, and maintained as an OWASP Foundation Project by Sonu Kapoor.`,
+      copyright: `CVE Lite CLI is MIT licensed, built in public, and maintained as an OWASP Foundation Project by <a href="https://sonukapoor.com" target="_blank" rel="noopener noreferrer">Sonu Kapoor</a>.`,
     },
     prism: {
       theme: prismThemes.github,

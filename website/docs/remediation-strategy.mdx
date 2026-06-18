@@ -1,22 +1,20 @@
+---
+title: Remediation Strategy
+description: Technical detail on how CVE Lite CLI determines fix commands — direct fixes, within-range refreshes, parent upgrades, and confidence levels.
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # Remediation Strategy
+
+:::tip[New to CVE Lite CLI remediation?]
+For a visual overview with diagrams and plain-English explanations, start with [How Remediation Works](how-remediation-works). This page covers the deeper technical detail.
+:::
 
 CVE Lite CLI is designed to turn vulnerability findings into concrete next actions. This page explains how the CLI decides which package to update, why direct and transitive findings are handled differently, and what it means when no confident automatic path is available.
 
 The scanner is intentionally conservative. It prefers a specific command when the lockfile, advisory data, and package metadata support it. When they do not, it explains the nearest parent context instead of inventing a fix.
-
-## Contents
-
-- [Lockfiles are the source of truth](#lockfiles-are-the-source-of-truth)
-- [Direct vs transitive findings](#direct-vs-transitive-findings)
-- [Direct dependency recommendations](#direct-dependency-recommendations)
-- [Transitive dependency recommendations](#transitive-dependency-recommendations)
-- [Path-specific transitive remediation](#path-specific-transitive-remediation)
-- [Why transitive findings should not be installed directly](#why-transitive-findings-should-not-be-installed-directly)
-- [What no confident automatic path means](#what-no-confident-automatic-path-means)
-- [Package-manager notes](#package-manager-notes)
-- [Current limitations](#current-limitations)
-
----
 
 ## Lockfiles are the source of truth
 
@@ -33,6 +31,8 @@ If no lockfile exists, the CLI can fall back to `package.json`, but only for exa
 
 For parser-specific behavior, see [Parser Coverage](parser-coverage.md).
 
+---
+
 ## Direct vs transitive findings
 
 The CLI classifies vulnerable packages as:
@@ -45,17 +45,42 @@ This distinction matters because direct and transitive fixes use different packa
 
 A direct dependency can usually be changed by updating the package itself:
 
-```bash
-npm install vulnerable-package@fixed-version
-```
+<Tabs groupId="package-manager">
+  <TabItem value="npm" label="npm" default>
+    ```bash
+    npm install vulnerable-package@fixed-version
+    ```
+  </TabItem>
+  <TabItem value="pnpm" label="pnpm">
+    ```bash
+    pnpm add vulnerable-package@fixed-version
+    ```
+  </TabItem>
+  <TabItem value="yarn" label="yarn">
+    ```bash
+    yarn add vulnerable-package@fixed-version
+    ```
+  </TabItem>
+  <TabItem value="bun" label="bun">
+    ```bash
+    bun add vulnerable-package@fixed-version
+    ```
+  </TabItem>
+</Tabs>
 
 A transitive dependency should usually be changed by updating the parent that brought it in:
 
-```text
-project -> parent-package -> vulnerable-package
+```mermaid
+flowchart TD
+    P(["Your project"]) --> A["parent-package"] --> V["vulnerable-package\n⚠ transitive"]
+    style P fill:#1e3a5f,color:#93c5fd,stroke:#3b82f6,padding:12px
+    style A fill:#1e293b,color:#cbd5e1,stroke:#475569,padding:12px
+    style V fill:#7f1d1d,color:#fca5a5,stroke:#ef4444,padding:12px
 ```
 
-In that example, the actionable package is usually `parent-package`, not `vulnerable-package`.
+In that example, the actionable package is `parent-package`, not `vulnerable-package`.
+
+---
 
 ## Direct dependency recommendations
 
@@ -68,23 +93,55 @@ The recommendation must satisfy these checks:
 - Pre-release targets are skipped during registry-based parent remediation checks.
 - If the original fixed-version hint is still vulnerable, the CLI moves forward to the next known non-vulnerable version when it can validate one.
 
-When those checks pass, the CLI emits a package-manager-native command such as:
+When those checks pass, the CLI emits a package-manager-native command:
 
-```bash
-npm install minimist@1.2.8
-pnpm add minimist@1.2.8
-yarn add minimist@1.2.8
-bun add minimist@1.2.8
-```
+<Tabs groupId="package-manager">
+  <TabItem value="npm" label="npm" default>
+    ```bash
+    npm install minimist@1.2.8
+    ```
+  </TabItem>
+  <TabItem value="pnpm" label="pnpm">
+    ```bash
+    pnpm add minimist@1.2.8
+    ```
+  </TabItem>
+  <TabItem value="yarn" label="yarn">
+    ```bash
+    yarn add minimist@1.2.8
+    ```
+  </TabItem>
+  <TabItem value="bun" label="bun">
+    ```bash
+    bun add minimist@1.2.8
+    ```
+  </TabItem>
+</Tabs>
 
 In workspace monorepos, the command includes the appropriate workspace flag so the install targets the correct workspace rather than the project root:
 
-```bash
-npm install -w packages/api minimist@1.2.8
-pnpm add --filter ./packages/api minimist@1.2.8
-yarn workspace api-package add minimist@1.2.8
-bun add --filter api-package minimist@1.2.8
-```
+<Tabs groupId="package-manager">
+  <TabItem value="npm" label="npm" default>
+    ```bash
+    npm install -w packages/api minimist@1.2.8
+    ```
+  </TabItem>
+  <TabItem value="pnpm" label="pnpm">
+    ```bash
+    pnpm add --filter ./packages/api minimist@1.2.8
+    ```
+  </TabItem>
+  <TabItem value="yarn" label="yarn">
+    ```bash
+    yarn workspace api-package add minimist@1.2.8
+    ```
+  </TabItem>
+  <TabItem value="bun" label="bun">
+    ```bash
+    bun add --filter packages/api minimist@1.2.8
+    ```
+  </TabItem>
+</Tabs>
 
 Direct findings are the only findings that `--fix` currently applies automatically. Transitive findings may still receive copy-and-run recommendations in normal scan output, but `--fix` does not auto-apply transitive parent changes.
 
@@ -107,6 +164,8 @@ For pnpm, Yarn, and Bun lockfiles, or when running with `--offline`, registry va
 
 **What to do if you see a downgrade recommendation:** check the advisory manually (the CVE or GHSA link is shown in verbose output and the HTML report) to identify the correct fixed version for your installed major version, then apply it directly.
 
+---
+
 ## Transitive dependency recommendations
 
 For transitive findings, the CLI tries to identify the parent package that can change the vulnerable child. This keeps the recommendation aligned with how package managers actually resolve dependency trees.
@@ -115,19 +174,42 @@ For transitive findings, the CLI tries to identify the parent package that can c
 
 For npm lockfiles, CVE Lite CLI builds a logical dependency graph from `package-lock.json`. This allows the CLI to inspect the parent-child edge and read the dependency range the parent declares for the vulnerable child.
 
-If the current parent already allows a known non-vulnerable child version inside its existing range, the CLI recommends `npm update <parent>`:
+If the current parent already allows a known non-vulnerable child version inside its existing range, the CLI recommends updating the parent:
 
-```text
-project -> mocha -> nanoid
+```mermaid
+flowchart TD
+    P(["Your project"]) --> M["mocha@10.0.0\ndeclares nanoid ^3.0.0"] --> N["nanoid@3.0.5\n⚠ vulnerable · fix at 3.0.7"]
+    M --> S["nanoid@3.0.7\n✓ within ^3.0.0 range"]
+    style P fill:#1e3a5f,color:#93c5fd,stroke:#3b82f6,padding:12px
+    style M fill:#1e293b,color:#cbd5e1,stroke:#475569,padding:12px
+    style N fill:#7f1d1d,color:#fca5a5,stroke:#ef4444,padding:12px
+    style S fill:#14532d,color:#86efac,stroke:#22c55e,padding:12px
 ```
 
-If `mocha` already allows a known non-vulnerable `nanoid` version within its declared range, the recommendation is:
+<Tabs groupId="package-manager">
+  <TabItem value="npm" label="npm" default>
+    ```bash
+    npm update mocha
+    ```
+  </TabItem>
+  <TabItem value="pnpm" label="pnpm">
+    ```bash
+    pnpm update --no-save mocha
+    ```
+  </TabItem>
+  <TabItem value="yarn" label="yarn">
+    ```bash
+    yarn upgrade mocha
+    ```
+  </TabItem>
+  <TabItem value="bun" label="bun">
+    ```bash
+    bun update mocha
+    ```
+  </TabItem>
+</Tabs>
 
-```bash
-npm update mocha
-```
-
-This asks npm to re-resolve the parent and its transitive child within the constraints already declared by the parent package. The CLI does not recommend `npm install nanoid@...` here because that would add `nanoid` as a direct dependency of your project, which changes the manifest without fixing the real dependency relationship.
+This asks the package manager to re-resolve the parent and its transitive child within the constraints already declared by the parent package. The CLI does not recommend installing `nanoid` directly here because that would add it as a direct dependency of your project, changing the manifest without fixing the real dependency relationship.
 
 For npm workspaces, this graph keeps workspace-local package paths in the node identity. That matters for hoisted installs because a package may physically appear near the workspace root while still belonging to a specific workspace dependency path.
 
@@ -141,11 +223,28 @@ It looks for a parent version that:
 - declares a dependency range that allows a known non-vulnerable child version
 - no longer permits the currently installed vulnerable child version when that can be determined
 
-When found, the CLI recommends upgrading the parent:
-
-```bash
-npm install parent-package@newer-version
-```
+<Tabs groupId="package-manager">
+  <TabItem value="npm" label="npm" default>
+    ```bash
+    npm install parent-package@newer-version
+    ```
+  </TabItem>
+  <TabItem value="pnpm" label="pnpm">
+    ```bash
+    pnpm add parent-package@newer-version
+    ```
+  </TabItem>
+  <TabItem value="yarn" label="yarn">
+    ```bash
+    yarn add parent-package@newer-version
+    ```
+  </TabItem>
+  <TabItem value="bun" label="bun">
+    ```bash
+    bun add parent-package@newer-version
+    ```
+  </TabItem>
+</Tabs>
 
 This means the remediation target is the package you directly or effectively control, while the vulnerable transitive package is resolved through the parent's dependency metadata.
 
@@ -155,32 +254,52 @@ For pnpm, Yarn, Bun, and deeper npm dependency paths, the CLI also tries a paren
 
 The fallback has two confidence levels:
 
-- **Exact direct child** means the path is shaped like `project -> parent -> vulnerable-package`, and the newer parent version changes the vulnerable package range directly.
+- **Exact direct child** means the path is shaped like `project → parent → vulnerable-package`, and the newer parent version changes the vulnerable package range directly.
 - **Best effort** means the vulnerable package is deeper in the chain, and the newer parent version changes an intermediate dependency that leads toward the vulnerable package.
 
 Best-effort recommendations are useful, but they should be reviewed more carefully because the CLI is reasoning across a longer dependency path.
 
+---
+
 ## Path-specific transitive remediation
 
-A transitive package can appear more than once in the same lockfile version through different parents:
+A transitive package can appear more than once in the same lockfile through different parents:
 
-```text
-project -> lint-staged -> picomatch
-project -> vite -> picomatch
-project -> vitest -> picomatch
+```mermaid
+flowchart TD
+    P(["Your project"])
+    P --> L["lint-staged"] --> PM1["picomatch@2.3.1\n⚠ vulnerable"]
+    P --> V["vite"] --> PM1
+    P --> VT["vitest"] --> PM1
+    style P fill:#1e3a5f,color:#93c5fd,stroke:#3b82f6,padding:12px
+    style L fill:#1e293b,color:#cbd5e1,stroke:#475569,padding:12px
+    style V fill:#1e293b,color:#cbd5e1,stroke:#475569,padding:12px
+    style VT fill:#1e293b,color:#cbd5e1,stroke:#475569,padding:12px
+    style PM1 fill:#7f1d1d,color:#fca5a5,stroke:#ef4444,padding:12px
 ```
 
 When CVE Lite CLI finds a parent upgrade for one of those paths, the command is path-specific unless the known dependency paths prove that the upgrade covers every recorded path for that vulnerable package version.
 
-For example, upgrading `lint-staged` may resolve:
+For example, upgrading `lint-staged` resolves only one of the three paths:
 
-```text
-project -> lint-staged -> picomatch
+```mermaid
+flowchart TD
+    P(["Your project"])
+    P --> L["lint-staged\n(upgraded)"] --> PM["picomatch\n✓ resolved"]
+    P --> V["vite"] --> PM2["picomatch\n⚠ still vulnerable"]
+    P --> VT["vitest"] --> PM3["picomatch\n⚠ still vulnerable"]
+    style P fill:#1e3a5f,color:#93c5fd,stroke:#3b82f6,padding:12px
+    style L fill:#14532d,color:#86efac,stroke:#22c55e,padding:12px
+    style PM fill:#14532d,color:#86efac,stroke:#22c55e,padding:12px
+    style V fill:#1e293b,color:#cbd5e1,stroke:#475569,padding:12px
+    style VT fill:#1e293b,color:#cbd5e1,stroke:#475569,padding:12px
+    style PM2 fill:#7f1d1d,color:#fca5a5,stroke:#ef4444,padding:12px
+    style PM3 fill:#7f1d1d,color:#fca5a5,stroke:#ef4444,padding:12px
 ```
 
-That does not necessarily remove `picomatch` from other paths in the lockfile. In those cases, the suggested fix plan labels the command as path-specific and tells you to run the command, rescan, and review remaining paths separately. This keeps the command actionable without implying that the vulnerable package version will disappear from the entire project.
+In those cases, the suggested fix plan labels the command as path-specific and tells you to run the command, rescan, and review remaining paths separately.
 
-The safest workflow for path-specific parent upgrades is:
+The safest workflow for path-specific parent upgrades:
 
 ```bash
 cve-lite /path/to/project
@@ -190,29 +309,54 @@ cve-lite /path/to/project
 
 If the same vulnerable package version still appears after the rescan, inspect the remaining dependency paths and address them separately.
 
+---
+
 ## Why transitive findings should not be installed directly
 
 Installing a vulnerable transitive package directly can make the output look actionable while creating the wrong dependency shape.
 
-For example:
-
-```text
-project -> parent-package -> vulnerable-child
+```mermaid
+flowchart TD
+    P(["Your project"]) --> A["parent-package"] --> V["vulnerable-child\n⚠ transitive"]
+    style P fill:#1e3a5f,color:#93c5fd,stroke:#3b82f6,padding:12px
+    style A fill:#1e293b,color:#cbd5e1,stroke:#475569,padding:12px
+    style V fill:#7f1d1d,color:#fca5a5,stroke:#ef4444,padding:12px
 ```
 
-Running this command:
+Running this installs `vulnerable-child` as a **direct** dependency of your project:
 
-```bash
-npm install vulnerable-child@fixed-version
-```
+<Tabs groupId="package-manager">
+  <TabItem value="npm" label="npm" default>
+    ```bash
+    npm install vulnerable-child@fixed-version
+    ```
+  </TabItem>
+  <TabItem value="pnpm" label="pnpm">
+    ```bash
+    pnpm add vulnerable-child@fixed-version
+    ```
+  </TabItem>
+  <TabItem value="yarn" label="yarn">
+    ```bash
+    yarn add vulnerable-child@fixed-version
+    ```
+  </TabItem>
+  <TabItem value="bun" label="bun">
+    ```bash
+    bun add vulnerable-child@fixed-version
+    ```
+  </TabItem>
+</Tabs>
 
-adds `vulnerable-child` to your project manifest. It does not necessarily change what `parent-package` resolves or uses. The lockfile may still contain the vulnerable transitive copy under the parent, and the project now has a new direct dependency that the application may not use.
+This does not necessarily change what `parent-package` resolves or uses. The lockfile may still contain the vulnerable transitive copy under the parent, and the project now has a new direct dependency that the application may not use.
 
 That is why CVE Lite CLI prefers:
 
 - direct package upgrades for direct findings
-- `npm update <parent>` when npm can resolve a known non-vulnerable child inside the current parent range
+- lockfile refresh when the parent range already covers a safe version
 - parent package upgrades when the parent range has to change
+
+---
 
 ## What no confident automatic path means
 
@@ -234,6 +378,8 @@ When this happens, use the dependency path shown in verbose output or the HTML r
 cve-lite /path/to/project --verbose
 cve-lite /path/to/project --report
 ```
+
+---
 
 ## Package-manager notes
 
@@ -259,6 +405,8 @@ Yarn lockfile parsing supports resolved package scanning, but dependency paths a
 
 Bun lockfile parsing supports resolved package scanning. Like Yarn, transitive remediation is currently more limited than npm because the CLI does not yet have Bun-specific parent range resolution.
 
+---
+
 ## Current limitations
 
 CVE Lite CLI does not guarantee that a dependency upgrade is compatible with your application. It checks vulnerability and package metadata, not runtime behavior.
@@ -278,3 +426,11 @@ cve-lite /path/to/project
 npm test
 cve-lite /path/to/project
 ```
+
+---
+
+## See also
+
+- [How Remediation Works](how-remediation-works) — visual overview with diagrams and plain-English explanations
+- [Offline Advisory DB](offline-advisory-db.md) — how to sync and use the local database
+- [CLI Reference](cli-reference.md) — full flag documentation including `--verbose`, `--fix`, and `--fail-on`

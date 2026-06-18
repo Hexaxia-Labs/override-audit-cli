@@ -1,0 +1,14 @@
+{
+  "lockfileVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "cve-lite-example-bun-mal-private-registry",
+      "dependencies": {
+        "node-ipc": "9.2.3",
+      },
+    },
+  },
+  "packages": {
+    "node-ipc": ["node-ipc@9.2.3", "https://npm.internal.example.com/node-ipc/-/node-ipc-9.2.3.tgz", {}, ""],
+  },
+}

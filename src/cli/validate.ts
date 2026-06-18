@@ -22,6 +22,18 @@ export function validateOptions(options: ParsedOptions): void {
     throw new Error("--fix cannot be used with --json");
   }
 
+  if (options.createPr && !options.fix) {
+    throw new Error("--create-pr requires --fix");
+  }
+
+  if (options.createPr && options.json) {
+    throw new Error("--create-pr cannot be used with --json");
+  }
+
+  if (options.prBase && !options.createPr) {
+    throw new Error("--base can only be used with --create-pr");
+  }
+
   if (options.report && options.json) {
     throw new Error("--report cannot be used with --json");
   }

@@ -1,5 +1,5 @@
 import { jest } from "@jest/globals";
-import { printBanner } from "../src/cli/help.js";
+import { printBanner, printHelp } from "../src/cli/help.js";
 import { stripAnsi } from "../src/utils/chalk.js";
 
 function captureLogs(run: () => void): string[] {
@@ -31,6 +31,30 @@ describe("printBanner", () => {
         printBanner();
       });
       expect(logs.some(line => line.includes("CVE Lite CLI"))).toBe(true);
+    } finally {
+      delete process.env["NO_UPDATE_NOTIFIER"];
+    }
+  });
+});
+
+describe("printHelp", () => {
+  it("prints the help examples section with common invocations", () => {
+    process.env["NO_UPDATE_NOTIFIER"] = "1";
+    try {
+      const logs = captureLogs(() => {
+        printHelp();
+      });
+      const output = logs.join("\n");
+
+      expect(output).toContain("Examples:");
+      expect(output).toContain("cve-lite .                        Scan the current directory");
+      expect(output).toContain("cve-lite . --verbose              Full output with fix plan and findings table");
+      expect(output).toContain("cve-lite . --fail-on high         Exit 1 if any high or critical findings are found");
+      expect(output).toContain("cve-lite . --json                 Write findings to a timestamped JSON file");
+      expect(output).toContain("cve-lite . --report               Generate an interactive HTML report");
+      expect(output).toContain("cve-lite . --fix                  Apply validated direct dependency fixes and rescan");
+      expect(output).toContain("cve-lite . --offline              Scan using the local advisory database (no network)");
+      expect(output).toContain("cve-lite advisories sync          Sync the local advisory database");
     } finally {
       delete process.env["NO_UPDATE_NOTIFIER"];
     }

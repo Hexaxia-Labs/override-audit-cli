@@ -1,3 +1,4 @@
+import { jest } from "@jest/globals";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -149,6 +150,85 @@ describe("renderHtmlReport", () => {
 
   it("embeds cliVersion in the footer", () => {
     expect(renderHtmlReport(data)).toContain("1.8.0");
+  });
+
+  it("shows contextual risk and next-action guidance for direct findings", () => {
+    const html = renderHtmlReport(data);
+    const recommendedActionIdx = html.indexOf("<h4>Recommended action</h4>");
+    const riskSummaryIdx = html.indexOf(
+      "<h4 class=\"detail-subheading\">Risk summary</h4>",
+    );
+    const nextActionIdx = html.indexOf(
+      "<h4 class=\"detail-subheading\">Next action</h4>",
+    );
+
+    expect(recommendedActionIdx).toBeGreaterThan(-1);
+    expect(riskSummaryIdx).toBeGreaterThan(recommendedActionIdx);
+    expect(nextActionIdx).toBeGreaterThan(riskSummaryIdx);
+    expect(html).toContain(
+      "Critical direct dependency. Prioritize this first because the project controls it directly.",
+    );
+    expect(html).toContain("Upgrade lodash toward 4.17.21.");
+  });
+
+  it("shows parent-specific guidance for transitive findings", () => {
+    const finding = makeFinding({
+      pkg: { name: "qs", version: "6.5.2", ecosystem: "npm" },
+      relationship: "transitive",
+      dependencyPaths: [["project", "express", "qs"]],
+      firstFixedVersion: "6.11.0",
+      recommendedNpmTransitiveRemediation: {
+        kind: "update-parent-within-range",
+        package: "express",
+        currentVersion: "4.17.1",
+        viaPath: ["project", "express"],
+        reason: "Safe child version available within current range",
+        targetChildVersion: "6.11.0",
+      },
+    });
+
+    const html = renderHtmlReport(
+      buildReportData({ ...BASE_PARAMS, findings: [finding] }),
+    );
+
+    expect(html).toContain(
+      "The current parent range can already absorb a safe qs update via express.",
+    );
+    expect(html).toContain("Lockfile refresh");
+    expect(html).toContain("express already permits a safe version.");
+  });
+
+  it("shows removal guidance for malicious direct packages", () => {
+    const finding = makeFinding({
+      firstFixedVersion: null,
+      vulnerabilities: [makeVuln({ id: "MAL-2025-21003" })],
+    });
+
+    const html = renderHtmlReport(
+      buildReportData({ ...BASE_PARAMS, findings: [finding] }),
+    );
+
+    expect(html).toContain(
+      "This package has a malicious code advisory. Remove it from your dependencies.",
+    );
+  });
+
+  it("escapes generated guidance before rendering", () => {
+    const finding = makeFinding({
+      pkg: { name: "<unsafe-package>", version: "1.0.0", ecosystem: "npm" },
+      firstFixedVersion: null,
+    });
+
+    const html = renderHtmlReport(
+      buildReportData({ ...BASE_PARAMS, findings: [finding] }),
+    );
+
+    expect(html).toContain(
+      "No known fix exists for &lt;unsafe-package&gt;. Consider replacing it",
+    );
+    expect(html).not.toContain(
+      "No known fix exists for <unsafe-package>. Consider replacing it",
+    );
   });
 
   it("embeds reportData as an inline script", () => {
@@ -369,6 +449,45 @@ describe("renderHtmlReport", () => {
     expect(html).toContain("⚠ Malicious");
   });
 
+  it("renders unverifiable badge for private registry MAL- finding", () => {
+    const finding = makeFinding({
+      firstFixedVersion: null,
+      vulnerabilities: [makeVuln({ id: "MAL-2025-99999" })],
+      maliciousUnverifiable: true,
+    });
+    const html = renderHtmlReport(buildReportData({ ...BASE_PARAMS, findings: [finding] }));
+    expect(html).toContain("Unverifiable (private source)");
+    expect(html).not.toContain("⚠ Malicious");
+  });
+
+  it("renders git source SHA-pinned badge for maliciousGitSource findings", () => {
+    const finding = makeFinding({
+      firstFixedVersion: null,
+      pkg: { name: "node-ipc", version: "9.2.3", ecosystem: "npm", resolvedUrl: "https://codeload.github.com/org/repo/tar.gz/9af9b3c49515b85598cd88de3e8cc20c7a98efbb" },
+      vulnerabilities: [makeVuln({ id: "MAL-2022-1000", summary: "Malicious" })],
+      maliciousGitSource: true,
+      maliciousGitSourcePinned: true,
+    });
+    const html = renderHtmlReport(buildReportData({ ...BASE_PARAMS, findings: [finding] }));
+    expect(html).toContain("Git source (SHA-pinned)");
+    expect(html).not.toContain("⚠ Malicious");
+    expect(html).not.toContain("Unverifiable (private source)");
+  });
+
+  it("renders git source floating ref badge for unpinned git source findings", () => {
+    const finding = makeFinding({
+      firstFixedVersion: null,
+      pkg: { name: "node-ipc", version: "9.2.3", ecosystem: "npm", resolvedUrl: "https://github.com/org/repo/archive/main.tar.gz" },
+      vulnerabilities: [makeVuln({ id: "MAL-2022-1000", summary: "Malicious" })],
+      maliciousGitSource: true,
+      maliciousGitSourcePinned: false,
+    });
+    const html = renderHtmlReport(buildReportData({ ...BASE_PARAMS, findings: [finding] }));
+    expect(html).toContain("Git source (floating ref)");
+    expect(html).not.toContain("⚠ Malicious");
+    expect(html).not.toContain("Unverifiable (private source)");
+  });
+
   it("shows generic no-fix tooltip when finding has non-MAL advisory and no fix version", () => {
     const finding = makeFinding({ firstFixedVersion: null });
     const html = renderHtmlReport(buildReportData({ ...BASE_PARAMS, findings: [finding] }));
@@ -380,6 +499,28 @@ describe("renderHtmlReport", () => {
     const html = renderHtmlReport(buildReportData({ ...BASE_PARAMS, findings: [finding] }));
     expect(html).toContain("4.17.21");
     expect(html).not.toContain("⚠ No fix");
+  });
+
+  describe("dev dependency badge", () => {
+    it("renders 'direct · dev' badge with dev CSS class for devDependency findings", () => {
+      const finding = makeFinding({
+        pkg: { name: "lodash", version: "4.17.20", ecosystem: "npm", dev: true },
+        relationship: "direct",
+      });
+      const html = renderHtmlReport(buildReportData({ ...BASE_PARAMS, findings: [finding] }));
+      expect(html).toContain('class="rel-badge dev"');
+      expect(html).toContain("direct · dev");
+    });
+
+    it("renders normal 'direct' badge without dev class for prod findings", () => {
+      const finding = makeFinding({
+        pkg: { name: "lodash", version: "4.17.20", ecosystem: "npm", dev: false },
+        relationship: "direct",
+      });
+      const html = renderHtmlReport(buildReportData({ ...BASE_PARAMS, findings: [finding] }));
+      expect(html).toContain('class="rel-badge direct"');
+      expect(html).not.toContain("· dev");
+    });
   });
 
   describe("renderHtmlReport CVE card", () => {
@@ -464,5 +605,78 @@ describe("writeHtmlReport", () => {
     await writeHtmlReport({ outputDir, data: data2, autoOpen: false });
     const json = JSON.parse(fs.readFileSync(path.join(outputDir, "report.json"), "utf8"));
     expect(json.cliVersion).toBe("2.0.0");
+  });
+
+  it("throws with descriptive path when mkdirSync fails", async () => {
+    const brokenDir = path.join(tmpDir, "broken");
+    const writeSpy = jest.spyOn(fs, "mkdirSync").mockImplementation(() => {
+      throw new Error("ENOSPC: no space left on device");
+    });
+    try {
+      const data = buildReportData(BASE_PARAMS);
+      await expect(writeHtmlReport({ outputDir: brokenDir, data, autoOpen: false }))
+        .rejects.toThrow(/Failed to create report directory/);
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+
+  it("throws with descriptive path when writeFileSync fails and cleans up partial files", async () => {
+    const outputDir = path.join(tmpDir, "cleanup-test");
+    const writeSpy = jest.spyOn(fs, "writeFileSync").mockImplementation(() => {
+      throw new Error("ENOSPC: no space left on device");
+    });
+    try {
+      const data = buildReportData(BASE_PARAMS);
+      await expect(writeHtmlReport({ outputDir, data, autoOpen: false }))
+        .rejects.toThrow(/Failed to write HTML report/);
+      expect(fs.existsSync(outputDir)).toBe(false);
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+
+  it("preserves pre-existing directory when writeFileSync fails", async () => {
+    const outputDir = path.join(tmpDir, "pre-existing");
+    fs.mkdirSync(outputDir, { recursive: true });
+    const marker = path.join(outputDir, "existing-file.txt");
+    fs.writeFileSync(marker, "do not delete me");
+    const writeSpy = jest.spyOn(fs, "writeFileSync").mockImplementation((filePath: fs.PathOrFileDescriptor) => {
+      const base = typeof filePath === "string" ? path.basename(filePath) : "";
+      if (base === "index.html" || base === "report.json") {
+        throw new Error("ENOSPC: no space left on device");
+      }
+      return undefined;
+    });
+    try {
+      const data = buildReportData(BASE_PARAMS);
+      await expect(writeHtmlReport({ outputDir, data, autoOpen: false }))
+        .rejects.toThrow(/Failed to write HTML report/);
+      expect(fs.existsSync(outputDir)).toBe(true);
+      expect(fs.existsSync(marker)).toBe(true);
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+
+  it("error contains cause chain with the original filesystem error", async () => {
+    const outputDir = path.join(tmpDir, "cause-test");
+    const originalError = new Error("ENOSPC: no space left on device");
+    const writeSpy = jest.spyOn(fs, "writeFileSync").mockImplementation(() => {
+      throw originalError;
+    });
+    try {
+      const data = buildReportData(BASE_PARAMS);
+      let thrown: unknown;
+      try {
+        await writeHtmlReport({ outputDir, data, autoOpen: false });
+      } catch (err) {
+        thrown = err;
+      }
+      expect(thrown).toBeInstanceOf(Error);
+      expect((thrown as Error).cause).toBe(originalError);
+    } finally {
+      writeSpy.mockRestore();
+    }
   });
 });

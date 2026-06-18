@@ -1,0 +1,19 @@
+{
+  "name": "cve-lite-example-deep-chain-no-fix",
+  "version": "1.0.0",
+  "private": true,
+  "description": "npm regression fixture: 3-level chain (express → body-parser → qs) where body-parser's ~6.14.0 range does not cover the fix — expect a parent upgrade on express, not npm update qs.",
+  "license": "MIT",
+  "dependencies": {
+    "express": "4.22.1"
+  },
+  "overrides": {
+    "express": {
+      "qs": "6.15.2"
+    },
+    "body-parser": {
+      ".": "1.20.4",
+      "qs": "6.14.2"
+    }
+  }
+}

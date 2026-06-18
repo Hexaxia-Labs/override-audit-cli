@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { removeDir } from "./test-utils.js";
 
 let SKILL_CONTENT: string;
 let installSkill: (projectRoot: string) => void;
@@ -41,7 +42,7 @@ describe("installSkill", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    removeDir(tmpDir);
   });
 
   describe("fresh project — all five files created", () => {

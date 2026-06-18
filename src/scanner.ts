@@ -1,5 +1,6 @@
 import type { Finding, NpmTransitiveGraph, OsvVuln, PackageRef, ParsedOptions, ScanInput } from "./types.js";
 import { chunk, unique, runWithConcurrency } from "./utils/array.js";
+import { isPrivateRegistrySource, isGitSource, hasCommitShaPinning } from "./utils/advisory.js";
 import { compareVersions, isPreReleaseVersion, looksLikeVersion } from "./utils/version.js";
 import { loadCache, saveCache, isEntryStale } from "./osv/cache.js";
 import { maxSeverity } from "./osv/severity.js";
@@ -12,6 +13,7 @@ import { ADVISORY_DB_STALE_AFTER_MS, getDefaultAdvisoryDbPath } from "./advisory
 import { resolveRecommendedParentUpgrade } from "./remediation/parent-upgrade.js";
 import {
   configureNpmRegistryDebug,
+  fetchPackument,
   resolveLowestKnownNonVulnerableVersion,
   resolvePublishedFixVersion,
 } from "./remediation/npm-registry.js";
@@ -23,6 +25,7 @@ import { buildNpmWorkspaceMap } from "./parsers/package-lock.js";
 import { buildBunWorkspaceMap } from "./parsers/bun-lock.js";
 import { pluralize } from "./utils/string.js";
 import { type DebugLogger } from "./output/debug.js";
+
 
 type ScanClassificationContext = {
   directDependencyNames?: ReadonlySet<string> | null;
@@ -196,24 +199,34 @@ export async function scanPackages(
       const ids = [...idSet];
       const detailSpinner = createSpinner("Fetching vulnerability details...", options);
       try {
-        for (let i = 0; i < ids.length; i++) {
-          const id = ids[i];
-          detailSpinner.update(`Fetching vulnerability details ${i + 1}/${ids.length}...`);
+        // cache.entries holds OsvVuln detail records. Unlike cache.queryEntries (which has a
+        // 30-minute staleness check applied earlier in this function), detail records have no
+        // expiry — they are considered valid for the lifetime of the cache file. The check below
+        // is therefore a simple presence check, not a staleness check. This is intentional and
+        // matches the original behaviour. Fetches run concurrently because there is no ordering
+        // dependency between CVE ID detail requests.
+        const uncachedIds: string[] = [];
+        for (const id of ids) {
           if (id in cache.entries) {
             const cached = cache.entries[id];
-            if (cached) {
-              vulnMap.set(id, cached);
-            }
-            continue;
+            if (cached) vulnMap.set(id, cached);
+          } else {
+            uncachedIds.push(id);
           }
+        }
 
-          try {
-            const detail = await advisorySource.getVuln(id);
-            vulnMap.set(id, detail);
-            cache.entries[id] = detail;
-          } catch (_error) {
-            cache.entries[id] = null;
-          }
+        // Fetch all uncached IDs concurrently
+        if (uncachedIds.length > 0) {
+          detailSpinner.update(`Fetching ${uncachedIds.length} vulnerability details...`);
+          await runWithConcurrency(uncachedIds, 10, async (id) => {
+            try {
+              const detail = await advisorySource.getVuln(id);
+              vulnMap.set(id, detail);
+              cache.entries[id] = detail;
+            } catch {
+              cache.entries[id] = null;
+            }
+          });
         }
         detailSpinner.succeed(`Loaded ${ids.length} vulnerability detail ${pluralize(ids.length, "record")}`);
       } catch (error) {
@@ -224,16 +237,14 @@ export async function scanPackages(
       const ids = [...idSet];
       const detailSpinner = createSpinner("Loading local advisory details...", options);
       try {
-        for (let i = 0; i < ids.length; i++) {
-          const id = ids[i];
-          detailSpinner.update(`Loading local advisory details ${i + 1}/${ids.length}...`);
+        await runWithConcurrency(ids, 10, async (id) => {
           try {
             const detail = await advisorySource.getVuln(id);
             vulnMap.set(id, detail);
           } catch {
             // ignore missing local records so scans remain resilient to partial DB state
           }
-        }
+        });
         detailSpinner.succeed(`Loaded ${ids.length} local advisory detail ${pluralize(ids.length, "record")}`);
       } catch (error) {
         detailSpinner.fail("Failed while loading local advisory details");
@@ -278,6 +289,17 @@ export async function scanPackages(
         recommendedNpmTransitiveRemediation: undefined,
       };
     });
+
+    for (const finding of findings) {
+      if (finding.vulnerabilities.some(v => v.id.startsWith("MAL-"))) {
+        if (isGitSource(finding.pkg)) {
+          finding.maliciousGitSource = true;
+          finding.maliciousGitSourcePinned = hasCommitShaPinning(finding.pkg);
+        } else if (isPrivateRegistrySource(finding.pkg)) {
+          finding.maliciousUnverifiable = true;
+        }
+      }
+    }
 
     const npmTransitiveGraph = context?.scanSource === "package-lock" && context.scanFilePath
       ? createNpmTransitiveGraphFromLockfile(context.scanFilePath, log, packages.length)
@@ -353,6 +375,26 @@ export async function scanPackages(
           await validateDirectFixTargets(findings, (finding) => {
             updateAnalysisProgress("validating fix target for", `${finding.pkg.name}@${finding.pkg.version}`);
           }, log);
+        }
+
+        // Pre-warm packument cache for all packages needed in the remediation loop.
+        // This converts N sequential registry round-trips into one concurrent burst,
+        // after which the loop runs entirely from the in-memory packument cache.
+        if (!offline) {
+          const packumentsToPrewarm = new Set<string>();
+          for (const finding of findings) {
+            if (finding.relationship !== "transitive") continue;
+            packumentsToPrewarm.add(finding.pkg.name);
+            const paths = finding.dependencyPaths;
+            if (paths.length > 0 && paths[0].length >= 2) {
+              packumentsToPrewarm.add(paths[0][paths[0].length - 2]);
+            }
+          }
+          if (packumentsToPrewarm.size > 0) {
+            await runWithConcurrency([...packumentsToPrewarm], 8, async (name) => {
+              try { await fetchPackument(name); } catch { /* loop will handle missing packuments */ }
+            });
+          }
         }
 
         for (const finding of findings) {
@@ -598,7 +640,16 @@ function classifyRelationship(
   packageName?: string,
   directDependencyNames?: ReadonlySet<string> | null,
 ): "direct" | "transitive" | "unknown" {
-  if (packageName && directDependencyNames?.has(packageName)) return "direct";
+  if (packageName && directDependencyNames?.has(packageName)) {
+    // The package name is declared as a direct dependency. But when multiple versions
+    // of the same package are installed (one direct, one transitive), the name alone
+    // is not enough — we need to verify this specific installed version is the direct
+    // one. A direct install always has at least one path of length 2 (["project", name]).
+    // If all paths are longer, this is a different (transitive) version of the package.
+    if (paths.length === 0) return "direct"; // no path data — trust the name
+    const hasDirectPath = paths.some(p => p.length <= 2);
+    return hasDirectPath ? "direct" : "transitive";
+  }
   if (paths.length === 0) return "unknown";
   if (directDependencyNames) return "transitive";
   const shortest = Math.min(...paths.map(p => p.length));
@@ -626,7 +677,7 @@ function findFirstFixedVersion(vulns: OsvVuln[]): string | null {
 
 export function buildCoverageNotes(scanInput: ScanInput, offline: boolean): string[] {
   const notes = [
-    "This MVP checks package versions against OSV advisories. It does not prove exploitability or runtime reachability.",
+    "CVE Lite CLI checks package versions against OSV advisories. It does not prove exploitability or runtime reachability.",
     "Installed node_modules contents are not verified in this scan.",
     "Container images, binaries, secrets, and IaC files are not scanned.",
     "Monorepo workspace boundaries are only partially modeled in this version.",

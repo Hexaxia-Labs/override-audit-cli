@@ -30,6 +30,7 @@ export type SuggestedFixTarget = {
   coveredPaths?: string[][];
   remainingPaths?: string[][];
   usage?: { imported: boolean; files: string[] } | null;
+  isDev?: boolean;
 };
 
 export type SuggestedFixSkip = {
@@ -60,7 +61,7 @@ export type SuggestedFixCommandPlan = {
 export function buildSuggestedFixCommandPlan(
   findings: Finding[],
   scanInput: ScanInput,
-  options?: { offline?: boolean },
+  options?: { offline?: boolean; subfolder?: string },
 ): SuggestedFixCommandPlan | null {
   const packageManager = inferPackageManager(scanInput);
   if (!packageManager) return null;
@@ -81,6 +82,11 @@ export function buildSuggestedFixCommandPlan(
     } catch {
       // workspace map is best-effort
     }
+  }
+
+  const devLookup = new Map<string, boolean>();
+  for (const pkg of scanInput.packages) {
+    devLookup.set(`${pkg.name}@${pkg.version}`, pkg.dev ?? false);
   }
 
   const prioritizedFindings = [...findings]
@@ -176,6 +182,7 @@ export function buildSuggestedFixCommandPlan(
           reason: `Direct upgrade target for ${finding.pkg.name}@${finding.pkg.version}`,
           usage: finding.usage ?? null,
           workspaces: pkgWorkspaces.length > 0 ? pkgWorkspaces : undefined,
+          isDev: finding.pkg.dev ?? false,
         });
       } else if (finding.fixVersionValidationNote) {
         skippedByKey.set(`${finding.relationship}:${finding.pkg.name}@${finding.pkg.version}`, {
@@ -231,9 +238,10 @@ export function buildSuggestedFixCommandPlan(
         severity: finding.severity,
         adjusted: false,
         adjustmentNote: null,
-        reason: `${finding.recommendedNpmTransitiveRemediation.package}@${finding.recommendedNpmTransitiveRemediation.currentVersion} already permits ${finding.pkg.name}@${finding.recommendedNpmTransitiveRemediation.targetChildVersion} — refreshing the lockfile is enough.`,
+        reason: finding.recommendedNpmTransitiveRemediation.reason,
         command: buildNpmUpdateCommand(finding.recommendedNpmTransitiveRemediation.package, finding.recommendedNpmTransitiveRemediation.workspaces),
         usage: finding.usage ?? null,
+        isDev: devLookup.get(`${finding.recommendedNpmTransitiveRemediation.package}@${finding.recommendedNpmTransitiveRemediation.currentVersion}`) ?? false,
       });
       continue;
     }
@@ -268,6 +276,7 @@ export function buildSuggestedFixCommandPlan(
         coveredPaths: coverage.coveredPaths,
         remainingPaths: coverage.remainingPaths,
         usage: finding.usage ?? null,
+        isDev: devLookup.get(`${finding.recommendedNpmTransitiveRemediation.package}@${finding.recommendedNpmTransitiveRemediation.currentVersion}`) ?? false,
       });
       continue;
     }
@@ -300,6 +309,7 @@ export function buildSuggestedFixCommandPlan(
         coveredPaths: coverage.coveredPaths,
         remainingPaths: coverage.remainingPaths,
         usage: finding.usage ?? null,
+        isDev: devLookup.get(`${finding.recommendedParentUpgrade.package}@${finding.recommendedParentUpgrade.currentVersion}`) ?? false,
       });
       continue;
     }
@@ -346,8 +356,9 @@ export function buildSuggestedFixCommandPlan(
 
     const primaryParent = getPrimaryParent(finding);
     if (finding.relationship === "transitive" && primaryParent) {
-      const fixClause = finding.firstFixedVersion
-        ? ` — check for a release that resolves ${finding.pkg.name} to ${finding.firstFixedVersion}+`
+      const fixHint = finding.validatedFirstFixedVersion ?? finding.firstFixedVersion;
+      const fixClause = fixHint
+        ? ` — check for a release that resolves ${finding.pkg.name} to ${fixHint}+`
         : "";
       skippedByKey.set(`${finding.relationship}:${finding.pkg.name}@${finding.pkg.version}`, {
         package: finding.pkg.name,
@@ -399,6 +410,14 @@ export function buildSuggestedFixCommandPlan(
 
   plan.coveredFindingCount = findings.filter(f => findSuggestedCommandForFinding(plan, f) !== null).length;
 
+  if (options?.subfolder) {
+    const prefix = `cd ${options.subfolder} && `;
+    if (plan.command) plan.command = prefix + plan.command;
+    for (const section of plan.sections) {
+      section.command = prefix + section.command;
+    }
+  }
+
   return plan;
 }
 
@@ -439,6 +458,10 @@ function commandPrefix(packageManager: SuggestedFixPackageManager): string {
   return "yarn add";
 }
 
+function devFlag(packageManager: SuggestedFixPackageManager): string {
+  return packageManager === "bun" ? "--dev" : "-D";
+}
+
 export function findSuggestedCommandForFinding(
   plan: SuggestedFixCommandPlan,
   finding: Finding,
@@ -473,7 +496,8 @@ export function findSuggestedCommandForFinding(
     const commands = buildWorkspaceInstallCommands([target], plan.packageManager);
     if (commands.length > 0) return commands.join(" && ");
   }
-  return `${commandPrefix(plan.packageManager)} ${target.package}@${target.targetVersion}`;
+  const flag = target.isDev ? ` ${devFlag(plan.packageManager)}` : "";
+  return `${commandPrefix(plan.packageManager)}${flag} ${target.package}@${target.targetVersion}`;
 }
 
 function packageManagerSourceLabel(scanInput: ScanInput): string {
@@ -511,6 +535,7 @@ function upsertTarget(
         : "parent-upgrade",
     displayTargetVersion: existing.displayTargetVersion ?? next.displayTargetVersion,
     command: existing.command ?? next.command,
+    isDev: (existing.isDev ?? false) && (next.isDev ?? false),
     workspaces: mergeStringArrays(existing.workspaces, next.workspaces),
     coverage: existing.coverage === "partial" || next.coverage === "partial"
       ? "partial"
@@ -691,28 +716,35 @@ function buildWorkspaceInstallCommands(
   const commands: string[] = [];
 
   for (const [wsKey, groupTargets] of groups) {
-    const pkgArgs = groupTargets.map(t => `${t.package}@${t.targetVersion}`).join(" ");
     const workspaces = wsKey ? wsKey.split("\0") : [];
+    const devTargets = groupTargets.filter(t => t.isDev);
+    const prodTargets = groupTargets.filter(t => !t.isDev);
 
-    if (packageManager === "npm") {
-      const wsFlags = workspaces.map(ws => `-w ${ws}`).join(" ");
-      commands.push(`npm install${wsFlags ? " " + wsFlags : ""} ${pkgArgs}`);
-    } else if (packageManager === "pnpm") {
-      const wsFlags = workspaces.map(ws => `--filter ./${ws}`).join(" ");
-      commands.push(`pnpm add${wsFlags ? " " + wsFlags : ""} ${pkgArgs}`);
-    } else if (packageManager === "yarn") {
-      if (workspaces.length === 0) {
-        commands.push(`yarn add ${pkgArgs}`);
-      } else {
-        for (const ws of workspaces) {
-          commands.push(`yarn workspace ${ws} add ${pkgArgs}`);
+    for (const [targets, isDev] of [[prodTargets, false], [devTargets, true]] as const) {
+      if (targets.length === 0) continue;
+      const pkgArgs = targets.map(t => `${t.package}@${t.targetVersion}`).join(" ");
+      const flag = isDev ? ` ${devFlag(packageManager)}` : "";
+
+      if (packageManager === "npm") {
+        const wsFlags = workspaces.map(ws => `-w ${ws}`).join(" ");
+        commands.push(`npm install${flag}${wsFlags ? " " + wsFlags : ""} ${pkgArgs}`);
+      } else if (packageManager === "pnpm") {
+        const wsFlags = workspaces.map(ws => `--filter ./${ws}`).join(" ");
+        commands.push(`pnpm add${flag}${wsFlags ? " " + wsFlags : ""} ${pkgArgs}`);
+      } else if (packageManager === "yarn") {
+        if (workspaces.length === 0) {
+          commands.push(`yarn add${flag} ${pkgArgs}`);
+        } else {
+          for (const ws of workspaces) {
+            commands.push(`yarn workspace ${ws} add${flag} ${pkgArgs}`);
+          }
         }
+      } else if (packageManager === "bun") {
+        const wsFlags = workspaces.map(ws => `--filter ${ws}`).join(" ");
+        commands.push(`bun add${flag}${wsFlags ? " " + wsFlags : ""} ${pkgArgs}`);
+      } else {
+        commands.push(`${commandPrefix(packageManager)}${flag} ${pkgArgs}`);
       }
-    } else if (packageManager === "bun") {
-      const wsFlags = workspaces.map(ws => `--filter ${ws}`).join(" ");
-      commands.push(`bun add${wsFlags ? " " + wsFlags : ""} ${pkgArgs}`);
-    } else {
-      commands.push(`${commandPrefix(packageManager)} ${pkgArgs}`);
     }
   }
 
@@ -745,9 +777,14 @@ function buildCommandForTargets(
     if (hasWorkspaces) {
       commandParts.push(...buildWorkspaceInstallCommands(installTargets, packageManager));
     } else {
-      commandParts.push(
-        `${commandPrefix(packageManager)} ${installTargets.map(target => `${target.package}@${target.targetVersion}`).join(" ")}`,
-      );
+      const prodInstall = installTargets.filter(t => !t.isDev);
+      const devInstall = installTargets.filter(t => t.isDev);
+      if (prodInstall.length > 0) {
+        commandParts.push(`${commandPrefix(packageManager)} ${prodInstall.map(t => `${t.package}@${t.targetVersion}`).join(" ")}`);
+      }
+      if (devInstall.length > 0) {
+        commandParts.push(`${commandPrefix(packageManager)} ${devFlag(packageManager)} ${devInstall.map(t => `${t.package}@${t.targetVersion}`).join(" ")}`);
+      }
     }
   }
 

@@ -21,6 +21,126 @@ All notable changes to CVE Lite CLI will be documented in this file.
 ### Tests
 - Coverage added for the overrides parser pipeline (npm/pnpm/yarn/bun), the eight detectors, command dispatch, the fix-and-verify hook, exit-code wiring, and end-to-end CLI integration through the real binary.
 
+## [1.24.0] - 2026-06-17
+
+### Added
+- `--sarif` can now be combined with `--report` to write both a SARIF file and an HTML report in one scan; useful for CI pipelines that upload to GitHub Code Scanning and also attach an HTML artifact for human review (#681)
+
+### Fixed
+- Fix commands now include `-D` flag for dev dependencies (`npm install -D`, `pnpm add -D`, `yarn add -D`, `bun add --dev`); mixed dev/prod batches split into separate commands (#689, #690)
+- GitHub Action now installs cve-lite-cli via `npm install --prefix` and appends the bin dir to `$GITHUB_PATH`, fixing `cve-lite: not found` errors on npm 10.x runners where npx cannot resolve a binary name different from the package name (#691, #692)
+
+### Changed
+- Upgrade jest to 30.4.1; add `.cve-lite/baseline.json` to suppress unfixable `js-yaml@3.14.2` transitive dev dep (GHSA-h67p-54hq-rp68) (#693, #694)
+
+### Docs
+- Socket CLI comparison expanded with structured sections and concrete examples (#655)
+
+## [1.23.1] - 2026-06-15
+
+### Performance
+- npm lockfile graph construction reduced from O(E*V) to O(E) using Set accumulators for edge lists (#652)
+- npm lockfile graph nodes and arrays pre-frozen at construction time; redundant uniquePathArrays removed (#654)
+- Remediation package lookup replaced with Map for O(1) access (#653)
+
+### Docs
+- Four new case studies: Strapi (Yarn Berry, 2,887 packages), Twenty (Yarn Berry, 5,451 packages), Presenton (dual npm lockfiles), Payload CMS (pnpm, 2,602 packages) (#593, #594, #595, #638)
+- OWASP Lab Project status reflected across all project docs: README, CONTRIBUTING, comparison page, case studies index, and press page (#673)
+
+### Changed
+- SARIF, CycloneDX, and HTML reporter file-write cleanup refactored for clarity; test spy coverage refined (#637)
+- Case study contribution scope clarified in CONTRIBUTING: contributors submit case-study files only, shared index files maintained by maintainer (#649)
+
+## [1.23.0] - 2026-06-13
+
+### Added
+- Graded output for MAL- advisories from git sources: terminal shows `⚠ Git source (SHA-pinned)` or `⚠ Git source (floating ref)` with resolved URL; HTML report shows orange badge; `isGitSource()` and `hasCommitShaPinning()` detection functions (#618)
+- `multiple-versions-same-pkg` and `git-source-mal` example fixtures
+
+### Fixed
+- Error handling and cleanup for SARIF, CycloneDX, and HTML report file writes; pre-existing directories preserved on write failure (#628)
+- Duplicate `db.close()` call removed from osv-sync catch block that could mask original error (#629)
+
+### Performance
+- CVE detail fetches now run concurrently via `runWithConcurrency` instead of serially — 2.2x faster on cold cache for large lockfiles (#645)
+- Packument cache pre-warmed before transitive remediation loop to eliminate serial npm registry round-trips (#645)
+
+## [1.22.0] - 2026-06-11
+
+### Added
+- Dev dependency labelling: terminal output and HTML report now show `direct · dev` / `transitive · dev` for findings from devDependencies; Yarn Classic and Berry parsers updated to detect dev status (#578)
+- `yarn-within-range` and `dev-only-finding` example fixtures for regression testing (#537, #613)
+
+### Fixed
+- Private registry detection (`⚠ Unverifiable (private source)`) now works for pnpm (legacy and v9), Yarn Classic, and Bun lockfiles — previously only npm was supported (#616)
+
+## [1.21.0] - 2026-06-09
+
+### Added
+- Ratcheting mode: `--ratchet` saves current findings as `.cve-lite/baseline.json`; subsequent scans auto-suppress known findings and only report new ones above the baseline
+
+### Docs
+- Dedicated ratcheting mode page at `/docs/ratcheting`
+- MAL- advisory handling and unverifiable private source findings documented in how-remediation-works
+
+## [1.20.0] - 2026-06-08
+
+### Added
+- `--create-pr` flag: after `--fix`, commits lockfile changes and opens a GitHub PR via `gh` with a descriptive title listing the upgraded packages and vulnerability count (#518)
+- `--base <branch>` flag to set the base branch for `--create-pr` (default: main)
+- `bun-within-range` fixture: Bun parser updated to reconstruct transitive paths from package relationships; within-range remediation now works for Bun lockfiles (#562)
+- `pnpm-within-range`, `deep-chain-no-fix`, `pnpm-aliased-chain` regression fixtures (#557, #558, #559)
+- CamoFox Browser case study demonstrating dual-remediation narrative (#556)
+- `mal-private-registry` example fixture demonstrating unverifiable MAL- output for private registry packages (#588)
+
+### Fixed
+- Yarn Classic parser now reconstructs full transitive dependency paths using BFS graph walk; within-range resolver now correctly suggests `yarn upgrade <pkg>` for deep chains (#576)
+- MAL- advisories for packages resolved from a private registry now surface as "Unverifiable (private source)" instead of a false-positive "Malicious" finding (#588)
+
+## [1.19.2] - 2026-06-05
+
+### Fixed
+- Transitive vulnerability findings now correctly classified as transitive when the same package is also installed as a direct dependency at a different version. Previously `uuid@8.3.2` (transitive) was classified as `direct` because `uuid@14.0.0` was in `package.json`, generating a wrong `npm install` command.
+- Skip reason version hint now uses the validated fix version consistently with the findings table, eliminating discrepancies between the two.
+- `--help` output no longer repeats the tool name and version already shown in the banner.
+
+### Changed
+- Skipped findings in verbose terminal output now show the advisory version with a gray `⊘` suffix instead of the full green version, signalling it is a hint only. A note below the table points to `--report` for detailed skip reasons.
+- HTML report findings table: `⊘ Skipped (N)` filter button added (only shown when there are skipped findings). Fixed column shows `⊘` icon with tooltip for skipped findings.
+- HTML report: findings section top margin fixed, scan notes moved to bottom after all important sections.
+- Scan notes: removed outdated MVP language.
+- Nested lockfile informational message moved from warnings (yellow) to notes (gray).
+
+### Docs
+- Added How Remediation Works page with Mermaid dependency tree diagrams and tabbed package manager commands.
+- Added usage examples to `--help` output.
+- 7 new case studies: Gatsby, Vercel AI SDK, Mastra, Lit, LangChain.js, OpenAI Agents JS, n8n.
+- Community contributors section added to README.
+
+### Docs
+- Gatsby case study added with verified baseline scan of a Yarn Classic lockfile snapshot (`examples/gatsby/`, 3,568 packages, 128 findings at revision `1f38c85`), including CVE Lite CLI vs `yarn audit` comparison.
+- Examples readme, docs sidebar, case studies index, and README updated to reference the Gatsby fixture and case study.
+- Vercel AI SDK case study added with verified baseline scan of a pnpm lockfile snapshot (`examples/vercel-ai-sdk/`, 3,570 packages, 55 findings at revision `3215032`), including CVE Lite CLI vs `pnpm audit` comparison.
+- Mastra case study added with verified baseline scan of a pnpm lockfile snapshot (`examples/mastra/`, 4,555 packages, 64 findings at revision `e9d54b2`), including CVE Lite CLI vs `pnpm audit` comparison.
+- Lit case study added with verified baseline scan of an npm workspaces lockfile snapshot (`examples/lit/`, 2,059 packages, 99 findings at revision `20afabd`), including CVE Lite CLI vs `npm audit` comparison.
+- LangChain.js case study added with verified baseline scan of a pnpm lockfile snapshot (`examples/langchainjs/`, 2,174 packages, 13 findings at revision `1503c9b`), including CVE Lite CLI vs `pnpm audit` comparison and lean-graph triage narrative.
+- OpenAI Agents SDK (JavaScript) case study added with verified baseline scan of a pnpm lockfile snapshot (`examples/openai-agents-js/`, 1,683 packages, 31 findings at revision `f76fc19`), including all-transitive parent-tracing narrative and CVE Lite CLI vs `pnpm audit` comparison.
+- n8n case study added with verified baseline scan of a pnpm lockfile snapshot (`examples/n8n/`, 3,746 packages, 32 findings at revision `e2e0394`), including CVE Lite CLI vs `pnpm audit` comparison.
+- CamoFox Browser case study added with verified baseline scan of an npm lockfile snapshot (`examples/camofox-browser/`, 435 packages, 2 findings at revision `ce3a3b0`), including within-range vs parent-upgrade `qs` remediation narrative and CVE Lite CLI vs `npm audit` comparison.
+
+## [1.19.1] - 2026-06-02
+
+### Fixed
+- Within-range transitive fix now detected for dependency chains deeper than 2 levels: when the immediate parent's declared range already covers a safe version of the vulnerable package, CVE Lite now suggests a lockfile refresh (`npm update <package>`) instead of an incorrect best-effort parent upgrade. Adds `examples/wrong-parent/` as a reproducible fixture for this class of bug.
+
+## [1.19.0] - 2026-06-01
+
+### Added
+- Multi-folder scan for monorepos without a root lockfile: when `cve-lite .` is run from a directory with no lockfile but two or more lockfiles in subfolders, the scanner automatically switches to multi-folder mode. Each subfolder is scanned independently, findings and fix commands are grouped per subfolder in terminal output, a single HTML report is generated with collapsible per-folder sections, and `--json` output includes a `subfolder` field on each finding.
+
+### Fixed
+- `isNewer` update check now correctly parses pre-release version strings (e.g. `1.19.0-alpha.1`) by stripping the pre-release suffix before comparison, preventing alpha users from seeing a false "downgrade available" prompt.
+
 ## [1.18.2] - 2026-06-01
 
 ### Added

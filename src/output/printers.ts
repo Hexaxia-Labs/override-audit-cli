@@ -7,10 +7,21 @@ import {
   countUniqueAdvisories,
   formatSeverityLabel,
   formatRelationshipLabel,
+  formatRelLabel,
   sortFindingsForOutput
 } from "./formatters.js";
 import { pluralize } from "../utils/string.js";
 import { selectFindingsForCompact } from "./finding-display.js";
+import {
+  MAL_PRIVATE_REGISTRY_COMPACT_MESSAGE,
+  MAL_PRIVATE_REGISTRY_LEGEND_MESSAGE,
+  MAL_GIT_SOURCE_PINNED_MESSAGE,
+  MAL_GIT_SOURCE_FLOATING_MESSAGE,
+  MAL_GIT_SOURCE_COMPACT_MESSAGE,
+  MAL_GIT_SOURCE_LEGEND_MESSAGE,
+  MAL_GIT_SOURCE_PINNED_DISPLAY,
+  MAL_GIT_SOURCE_FLOATING_DISPLAY,
+} from "../constants.js";
 
 export function printSummary(findings: Finding[], packageCount: number, scanInput: ScanInput) {
   if (findings.length === 0) {
@@ -60,7 +71,7 @@ export function printActionSummary(findings: Finding[]) {
 export function printSuggestedFixCommands(
   findings: Finding[],
   scanInput: ScanInput,
-  options?: { offline?: boolean },
+  options?: { offline?: boolean; subfolder?: string },
 ) {
   const plan = buildSuggestedFixCommandPlan(findings, scanInput, options);
   if (!plan) return;
@@ -119,7 +130,7 @@ export function printSuggestedFixCommands(
 export function printSuggestedFixCommandSkips(
   findings: Finding[],
   scanInput: ScanInput,
-  options?: { offline?: boolean },
+  options?: { offline?: boolean; subfolder?: string },
 ) {
   const plan = buildSuggestedFixCommandPlan(findings, scanInput, options);
   if (!plan || plan.skipped.length === 0) return;
@@ -175,21 +186,36 @@ export function printSkippedDependencies(skipped: string[]) {
   }
 }
 
-export function printTable(findings: Finding[], threshold: SeverityLabel | null) {
+export function printTable(findings: Finding[], threshold: SeverityLabel | null, skippedKeys?: ReadonlySet<string>) {
   const headers = ["Package", "Version", "Severity", "Type", "Usage", "Fixed", "IDs"];
   const rawRows = findings.map(f => {
     let usageText = "n/a";
     if (f.usage) {
       usageText = f.usage.imported ? `${f.usage.files.length} file(s)` : "unused";
     }
+    const isSkipped = skippedKeys?.has(`${f.pkg.name}@${f.pkg.version}`);
+    const fixVersion = f.validatedFirstFixedVersion ?? f.firstFixedVersion;
+    let fixedDisplay: string;
+    if (isSkipped && fixVersion) {
+      fixedDisplay = chalk.gray(`${fixVersion} ⊘`);
+    } else if (fixVersion) {
+      fixedDisplay = fixVersion;
+    } else if (f.maliciousUnverifiable) {
+      fixedDisplay = chalk.yellow("⚠ Unverifiable (private source)");
+    } else if (f.maliciousGitSource) {
+      fixedDisplay = chalk.yellow(f.maliciousGitSourcePinned ? MAL_GIT_SOURCE_PINNED_DISPLAY : MAL_GIT_SOURCE_FLOATING_DISPLAY);
+    } else if (f.vulnerabilities.some(v => v.id.startsWith("MAL-"))) {
+      fixedDisplay = chalk.yellow("⚠ Malicious");
+    } else {
+      fixedDisplay = chalk.yellow("⚠ no fix");
+    }
     return [
       f.pkg.name,
       f.pkg.version,
       f.severity,
-      f.relationship,
+      formatRelLabel(f),
       usageText,
-      (f.validatedFirstFixedVersion ?? f.firstFixedVersion) ??
-        (f.vulnerabilities.some(v => v.id.startsWith("MAL-")) ? chalk.yellow("⚠ Malicious") : chalk.yellow("⚠ no fix")),
+      fixedDisplay,
       f.vulnerabilities.map(v => v.id).join(", ")
     ];
   });
@@ -238,8 +264,20 @@ export function printTable(findings: Finding[], threshold: SeverityLabel | null)
       const action = f.relationship === "direct"
         ? "Remove it from your dependencies immediately."
         : "Upgrade or remove the parent package that pulls it in.";
-      console.log(chalk.red(`  · ${f.pkg.name}@${f.pkg.version} — ${action}`));
+      if (f.maliciousUnverifiable) {
+        console.log(chalk.yellow(`  · ${f.pkg.name}@${f.pkg.version} - Unverifiable (private source) - ${action}`));
+      } else if (f.maliciousGitSource) {
+        const msg = f.maliciousGitSourcePinned ? MAL_GIT_SOURCE_PINNED_MESSAGE : MAL_GIT_SOURCE_FLOATING_MESSAGE;
+        const url = f.pkg.resolvedUrl ? ` (${f.pkg.resolvedUrl})` : "";
+        console.log(chalk.yellow(`  · ${f.pkg.name}@${f.pkg.version}${url} - ${msg}`));
+      } else {
+        console.log(chalk.red(`  · ${f.pkg.name}@${f.pkg.version} - ${action}`));
+      }
     }
+  }
+
+  if (skippedKeys && skippedKeys.size > 0 && findings.some(f => skippedKeys.has(`${f.pkg.name}@${f.pkg.version}`))) {
+    console.log(chalk.gray("⊘ Advisory hint only — no automated fix command could be generated. Run --report to view detailed skip reasons."));
   }
 
   if (threshold) {
@@ -332,7 +370,7 @@ function wrapCell(value: string, width: number): string[] {
 export function printCompactOutput(
   findings: Finding[],
   scanInput?: ScanInput,
-  options?: { offline?: boolean; all?: boolean },
+  options?: { offline?: boolean; all?: boolean; subfolder?: string },
 ) {
   console.log("");
   
@@ -354,9 +392,9 @@ export function printCompactOutput(
   for (const finding of urgentFindings) {
     const sevLabel = finding.severity.toUpperCase().padEnd(8);
     const typeLabel = finding.relationship === "direct"
-      ? "Direct dependency"
+      ? `Direct dependency${finding.pkg.dev === true ? " · dev" : ""}`
       : finding.relationship === "transitive"
-        ? "Transitive dependency"
+        ? `Transitive dependency${finding.pkg.dev === true ? " · dev" : ""}`
         : "Unknown dependency";
         
     let usageContext = "";
@@ -373,10 +411,17 @@ export function printCompactOutput(
     
     const isMalicious = finding.vulnerabilities.some(v => v.id.startsWith("MAL-"));
     if (isMalicious) {
-      const action = finding.relationship === "direct"
-        ? "Remove this package from your dependencies immediately."
-        : "Upgrade or remove the parent package that pulls it in.";
-      console.log(`            ${chalk.red(`⚠ Malicious: ${action}`)}`);
+      if (finding.maliciousUnverifiable) {
+        console.log(`            ${chalk.yellow(`⚠ Unverifiable (private source) - ${MAL_PRIVATE_REGISTRY_COMPACT_MESSAGE}`)}`);
+      } else if (finding.maliciousGitSource) {
+        const url = finding.pkg.resolvedUrl ? ` Source: ${finding.pkg.resolvedUrl}` : "";
+        console.log(`            ${chalk.yellow(`⚠ ${MAL_GIT_SOURCE_COMPACT_MESSAGE}${url}`)}`);
+      } else {
+        const action = finding.relationship === "direct"
+          ? "Remove this package from your dependencies immediately."
+          : "Upgrade or remove the parent package that pulls it in.";
+        console.log(`            ${chalk.red(`⚠ Malicious: ${action}`)}`);
+      }
     } else if (finding.recommendedNpmTransitiveRemediation?.kind === "update-parent-within-range") {
       console.log(
         `            ${chalk.gray(`Fix: lockfile refresh — ${finding.recommendedNpmTransitiveRemediation.package} already permits a safe version`)}`,
@@ -487,10 +532,16 @@ export function printCompactOutput(
     console.log("");
     console.log(chalk.bold.red("⚠ Malicious package advisory:"));
     for (const f of maliciousCompact) {
-      const action = f.relationship === "direct"
-        ? "Remove it from your dependencies immediately."
-        : "Upgrade or remove the parent package that pulls it in.";
-      console.log(chalk.red(`  · ${f.pkg.name}@${f.pkg.version} — ${action}`));
+      if (f.maliciousUnverifiable) {
+        console.log(chalk.yellow(`  · ${f.pkg.name}@${f.pkg.version} - Unverifiable (private source) - ${MAL_PRIVATE_REGISTRY_LEGEND_MESSAGE}`));
+      } else if (f.maliciousGitSource) {
+        console.log(chalk.yellow(`  · ${f.pkg.name}@${f.pkg.version} - Git source - ${MAL_GIT_SOURCE_LEGEND_MESSAGE}`));
+      } else {
+        const action = f.relationship === "direct"
+          ? "Remove it from your dependencies immediately."
+          : "Upgrade or remove the parent package that pulls it in.";
+        console.log(chalk.red(`  · ${f.pkg.name}@${f.pkg.version} - ${action}`));
+      }
     }
   }
 

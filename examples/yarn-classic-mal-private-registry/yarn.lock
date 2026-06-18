@@ -1,0 +1,7 @@
+# yarn lockfile v1
+
+
+node-ipc@9.2.3:
+  version "9.2.3"
+  resolved "https://npm.internal.example.com/node-ipc/-/node-ipc-9.2.3.tgz"
+  integrity sha512-placeholder==

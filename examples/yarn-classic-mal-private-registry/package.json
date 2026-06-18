@@ -1,0 +1,10 @@
+{
+  "name": "cve-lite-example-yarn-classic-mal-private-registry",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Yarn Classic fixture: node-ipc resolved from a private registry — should show Unverifiable (private source) instead of Malicious.",
+  "license": "ISC",
+  "dependencies": {
+    "node-ipc": "9.2.3"
+  }
+}

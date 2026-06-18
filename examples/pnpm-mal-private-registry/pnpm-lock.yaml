@@ -1,0 +1,19 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+  .:
+    dependencies:
+      node-ipc:
+        specifier: 9.2.3
+        version: 9.2.3
+
+packages:
+  node-ipc@9.2.3:
+    resolution: {tarball: 'https://npm.internal.example.com/node-ipc/-/node-ipc-9.2.3.tgz'}
+
+snapshots:
+  node-ipc@9.2.3: {}

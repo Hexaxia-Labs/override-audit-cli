@@ -1,17 +1,29 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { serializeFinding } from "./formatters.js";
+import { serializeFinding, summarizeNextAction, summarizeRisk } from "./formatters.js";
 import { LOGO_BASE64 } from "./logo-base64.js";
 import { OWASP_LOGO_BASE64 } from "./owasp-logo-base64.js";
 import { isMajorVersionBump } from "../utils/version.js";
 import { pluralize } from "../utils/string.js";
+import { MAL_GIT_SOURCE_PINNED_DISPLAY, MAL_GIT_SOURCE_FLOATING_DISPLAY } from "../constants.js";
 import { renderOverrideFindingsHtml } from "./override-findings-html.js";
 import type { Finding } from "../types.js";
 import type { OverrideFinding } from "../overrides/types.js";
 import type { SuggestedFixCommandPlan } from "../remediation/fix-commands.js";
 
-export type SerializedFinding = ReturnType<typeof serializeFinding>;
+export type SerializedFinding = ReturnType<typeof serializeHtmlFinding>;
+
+export function serializeHtmlFinding(
+  finding: Finding,
+  plan?: SuggestedFixCommandPlan | null,
+) {
+  return {
+    ...serializeFinding(finding, plan),
+    riskSummary: summarizeRisk(finding),
+    nextAction: summarizeNextAction(finding),
+  };
+}
 
 export type ReportData = {
   projectPath: string;
@@ -46,7 +58,9 @@ export function buildReportData(params: {
     packageManager: params.packageManager,
     lockfileSource: params.lockfileSource,
     packageCount: params.packageCount,
-    findings: params.findings.map(finding => serializeFinding(finding, params.suggestedFixCommands)),
+    findings: params.findings.map(finding =>
+      serializeHtmlFinding(finding, params.suggestedFixCommands),
+    ),
     suggestedFixCommands: params.suggestedFixCommands,
     notes: params.notes,
     warnings: params.warnings,
@@ -54,36 +68,7 @@ export function buildReportData(params: {
   };
 }
 
-export function renderHtmlReport(data: ReportData): string {
-  const projectName = path.basename(data.projectPath);
-  const scanDate = new Date(data.scannedAt).toLocaleString();
-
-  const counts = { critical: 0, high: 0, medium: 0, low: 0, unknown: 0, none: 0 };
-  for (const f of data.findings) {
-    const sev = f.severity as keyof typeof counts;
-    if (sev in counts) counts[sev]++;
-  }
-
-  const totalCVEs = new Set(data.findings.flatMap(f => f.vulnerabilities.map(v => v.id))).size;
-
-  const noticesHtml = renderNotices(data.notes, data.warnings);
-  const fixPlanHtml = renderFixPlan(data.suggestedFixCommands);
-  const findingRowsHtml = data.findings.map(renderFindingRow).join("\n");
-  const dataJson = JSON.stringify(data)
-    .replace(/</g, "\\u003c")
-    .replace(/>/g, "\\u003e")
-    .replace(/&/g, "\\u0026")
-    .replace(/\u2028/g, "\\u2028")
-    .replace(/\u2029/g, "\\u2029");
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CVE Lite — ${escapeHtml(projectName)}</title>
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+export const REPORT_STYLES = `*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:14px;line-height:1.5}
 .report-header{background:#161b22;border-bottom:1px solid #30363d;padding:14px 32px;display:flex;align-items:center;justify-content:space-between;gap:24px}
 .header-left{display:flex;align-items:center;gap:20px}
@@ -132,7 +117,7 @@ button.header-link:hover{color:#58a6ff;border-color:#58a6ff}
 .fix-cmd .cmd-meta{font-size:11px;color:#8b949e;white-space:nowrap}
 .fix-cmd .copy-btn{font-size:11px;color:#8b949e;background:#21262d;border:1px solid #30363d;border-radius:4px;padding:3px 8px;cursor:pointer}
 .fix-cmd .copy-btn:hover{color:#e6edf3;background:#30363d}
-.findings-section{margin:0 32px 32px}
+.findings-section{margin:24px 32px 32px}
 .findings-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .findings-header h2{font-size:13px;font-weight:600;color:#e6edf3}
 .filter-bar{display:flex;gap:6px}
@@ -160,14 +145,18 @@ button.header-link:hover{color:#58a6ff;border-color:#58a6ff}
 .sev-badge.medium{background:#e3b34122;color:#e3b341;border:1px solid #e3b34166}
 .sev-badge.low{background:#388bfd22;color:#388bfd;border:1px solid #388bfd66}
 .sev-badge.unknown{background:#8b949e22;color:#8b949e;border:1px solid #8b949e66}
+.badge-warning{display:inline-block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;padding:2px 8px;border-radius:4px;background:#e3b34122;color:#e3b341;border:1px solid #e3b34166}
+.badge-git-source{background:#fb8c0022;color:#fb8c00;border:1px solid #fb8c0055;border-radius:4px;font-size:11px;padding:2px 6px}
 .rel-badge{font-size:11px;padding:2px 7px;border-radius:4px}
 .rel-badge.direct{color:#3fb950;background:#3fb95022}
 .rel-badge.transitive{color:#e3b341;background:#e3b34122}
 .rel-badge.unknown{color:#8b949e;background:#8b949e22}
+.rel-badge.dev{color:#a371f7;background:#6e40c922;border:1px solid #6e40c955}
 .cve-link{font-size:11px;color:#58a6ff;font-family:monospace;text-decoration:none;border-bottom:1px dotted #58a6ff66}
 .cve-link:hover{color:#79c0ff}
 .fix-hint{font-size:11px;color:#3fb950;font-family:monospace}
 .fix-hint.none{color:#e3b341}
+.fix-hint.hint-only{color:#8b949e}
 .expand-icon{color:#8b949e;font-size:10px}
 .detail-row{background:#0d1117;border-top:1px solid #21262d;display:none}
 .detail-row.visible{display:table-row}
@@ -175,6 +164,7 @@ button.header-link:hover{color:#58a6ff;border-color:#58a6ff}
 .expanded-inner{padding:16px 20px 20px 48px;display:flex;gap:32px}
 .detail-col{flex:1}
 .detail-col h4{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:#8b949e;margin-bottom:8px}
+.detail-col h4.detail-subheading{margin-top:14px}
 .detail-col p{font-size:12px;color:#8b949e;line-height:1.6}
 .dep-path{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .dep-node{font-size:11px;font-family:monospace;background:#161b22;border:1px solid #30363d;border-radius:4px;padding:2px 8px;color:#e6edf3}
@@ -185,7 +175,7 @@ button.header-link:hover{color:#58a6ff;border-color:#58a6ff}
 .fix-cmd-inline .copy-btn{font-size:11px;color:#8b949e;background:#21262d;border:1px solid #30363d;border-radius:4px;padding:3px 8px;cursor:pointer}
 .fix-cmd-note{margin:4px 0 0;font-size:12px;color:#8b949e;font-style:italic;line-height:1.5}
 .report-footer{margin:0 32px 32px;padding:12px 0;border-top:1px solid #21262d;display:flex;justify-content:space-between;font-size:11px;color:#8b949e}
-.scan-notes{margin:0 32px 16px}
+.scan-notes{margin:24px 32px 16px}
 .scan-notes-toggle{display:flex;align-items:center;gap:6px;font-size:11px;color:#8b949e;background:none;border:none;cursor:pointer;padding:0}
 .scan-notes-toggle:hover{color:#e6edf3}
 .scan-notes-toggle .arrow{font-size:9px;transition:transform .15s}
@@ -221,7 +211,43 @@ button.header-link:hover{color:#58a6ff;border-color:#58a6ff}
 .override-hygiene table tbody tr.finding.high{border-left:3px solid #fb8500}
 .override-hygiene table tbody tr.finding.medium{border-left:3px solid #e3b341}
 .override-hygiene table tbody tr.finding.low{border-left:3px solid #388bfd}
-.override-hygiene table tbody tr.finding.info{border-left:3px solid #8b949e}
+.override-hygiene table tbody tr.finding.info{border-left:3px solid #8b949e}`;
+
+export function renderHtmlReport(data: ReportData): string {
+
+  const projectName = path.basename(data.projectPath);
+  const scanDate = new Date(data.scannedAt).toLocaleString();
+
+  const counts = { critical: 0, high: 0, medium: 0, low: 0, unknown: 0, none: 0 };
+  for (const f of data.findings) {
+    const sev = f.severity as keyof typeof counts;
+    if (sev in counts) counts[sev]++;
+  }
+
+  const totalCVEs = new Set(data.findings.flatMap(f => f.vulnerabilities.map(v => v.id))).size;
+
+  const noticesHtml = renderNotices(data.notes, data.warnings);
+  const fixPlanHtml = renderFixPlan(data.suggestedFixCommands);
+  const skippedKeys = new Set(
+    (data.suggestedFixCommands?.skipped ?? []).map(s => `${s.package}@${s.version}`)
+  );
+  const skippedSectionHtml = renderSkippedSection(data.suggestedFixCommands);
+  const findingRowsHtml = data.findings.map((f, i) => renderFindingRow(f, i, skippedKeys)).join("\n");
+  const dataJson = JSON.stringify(data)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CVE Lite — ${escapeHtml(projectName)}</title>
+<style>
+${REPORT_STYLES}
 </style>
 </head>
 <body>
@@ -270,7 +296,6 @@ button.header-link:hover{color:#58a6ff;border-color:#58a6ff}
 </div>
 
 ${fixPlanHtml}
-${noticesHtml}
 
 <div class="findings-section">
   <div class="findings-header">
@@ -283,6 +308,7 @@ ${noticesHtml}
         <button class="filter-btn" onclick="setFilter('high',this)">High (${counts.high})</button>
         <button class="filter-btn" onclick="setFilter('medium',this)">Medium (${counts.medium})</button>
         <button class="filter-btn" onclick="setFilter('direct',this)">Direct only</button>
+        ${skippedKeys.size > 0 ? `<button class="filter-btn" onclick="setFilter('skipped',this)">⊘ Skipped (${skippedKeys.size})</button>` : ""}
       </div>
     </div>
   </div>
@@ -303,6 +329,7 @@ ${findingRowsHtml}
     </tbody>
   </table>
 </div>
+${noticesHtml}
 
 ${renderOverrideFindingsHtml(data.overrideFindings ?? [])}
 
@@ -359,6 +386,7 @@ function applyFilters() {
     else if (activeFilter === 'high') visible = f.severity === 'high';
     else if (activeFilter === 'medium') visible = f.severity === 'medium';
     else if (activeFilter === 'direct') visible = f.relationship === 'direct';
+    else if (activeFilter === 'skipped') visible = mainRow?.dataset?.skipped === '1';
     if (visible && query) {
       const ids = [...(f.cves || []), ...(f.vulnerabilities || []).map(v => v.id)].join(' ').toLowerCase();
       visible = f.package.toLowerCase().includes(query) || f.version.toLowerCase().includes(query) || ids.includes(query);
@@ -429,7 +457,7 @@ document.addEventListener('click', function(e) {
 </html>`;
 }
 
-function escapeHtml(str: string): string {
+export function escapeHtml(str: string): string {
   return str
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -444,16 +472,31 @@ function advisoryLink(id: string): string {
   return `<a class="cve-link" href="https://osv.dev/vulnerability/${escapeHtml(id)}" target="_blank">${escapeHtml(id)}</a>`;
 }
 
-function renderFindingRow(finding: SerializedFinding, idx: number): string {
+function renderRelBadge(finding: SerializedFinding): string {
+  if (finding.dev) {
+    return `<span class="rel-badge dev">${escapeHtml(finding.relationship)} · dev</span>`;
+  }
+  return `<span class="rel-badge ${escapeHtml(finding.relationship)}">${escapeHtml(finding.relationship)}</span>`;
+}
+
+export function renderFindingRow(finding: SerializedFinding, idx: number, skippedKeys?: ReadonlySet<string>): string {
   const cveLinks = finding.cves.length > 0
     ? finding.cves.map(advisoryLink).join(", ")
     : finding.vulnerabilities.map(v => advisoryLink(v.id)).join(", ");
 
   const isMalicious = finding.vulnerabilities.some(v => v.id.startsWith("MAL-"));
-  const fixHtml = finding.validatedFirstFixedVersion
-    ? `<span class="fix-hint">${escapeHtml(finding.validatedFirstFixedVersion)}</span>`
-    : finding.firstFixedVersion
-    ? `<span class="fix-hint">${escapeHtml(finding.firstFixedVersion)}</span>`
+  const isSkipped = skippedKeys?.has(`${finding.package}@${finding.version}`);
+  const fixVersion = finding.validatedFirstFixedVersion ?? finding.firstFixedVersion;
+  const fixHtml = isSkipped && fixVersion
+    ? `<span class="fix-hint hint-only" title="Advisory hint only — no automated fix command was generated. See the Skipped findings section below for details.">${escapeHtml(fixVersion)} ⊘</span>`
+    : fixVersion
+    ? `<span class="fix-hint">${escapeHtml(fixVersion)}</span>`
+    : isMalicious && finding.maliciousUnverifiable
+    ? `<span class="badge badge-warning" title="MAL- advisory found but package resolved from a private registry - may not apply to your artifact">Unverifiable (private source)</span>`
+    : isMalicious && finding.maliciousGitSource && finding.maliciousGitSourcePinned
+    ? `<span class="badge badge-git-source" title="MAL- advisory found but package resolves from a git source pinned to a commit SHA — verify the repository and org are trusted">${escapeHtml(MAL_GIT_SOURCE_PINNED_DISPLAY)}</span>`
+    : isMalicious && finding.maliciousGitSource
+    ? `<span class="badge badge-git-source" title="MAL- advisory found but package resolves from a git source with a floating reference — verify the repository, org, and ref are safe">${escapeHtml(MAL_GIT_SOURCE_FLOATING_DISPLAY)}</span>`
     : isMalicious
     ? `<span class="fix-hint none" title="Malicious code advisory — remove this package">⚠ Malicious</span>`
     : `<span class="fix-hint none" title="No known fix — consider replacing this package">⚠ No fix</span>`;
@@ -478,12 +521,12 @@ function renderFindingRow(finding: SerializedFinding, idx: number): string {
     ? renderTransitiveContextCol(finding)
     : "";
 
-  return `      <tr id="row-${idx}" onclick="toggleRow(${idx})">
+  return `      <tr id="row-${idx}" data-skipped="${isSkipped ? '1' : '0'}" onclick="toggleRow(${idx})">
         <td><span class="expand-icon" id="icon-${idx}">▶</span></td>
         <td><div class="pkg-name">${escapeHtml(finding.package)}</div><div class="pkg-version">${escapeHtml(finding.version)}</div></td>
         <td>${fixHtml}</td>
         <td><span class="sev-badge ${escapeHtml(finding.severity)}">${escapeHtml(finding.severity)}</span></td>
-        <td><span class="rel-badge ${escapeHtml(finding.relationship)}">${escapeHtml(finding.relationship)}</span></td>
+        <td>${renderRelBadge(finding)}</td>
         <td>${cveLinks}</td>
       </tr>
       <tr id="detail-${idx}" class="detail-row">
@@ -501,6 +544,10 @@ function renderFindingRow(finding: SerializedFinding, idx: number): string {
             <div class="detail-col">
               <h4>Recommended action</h4>
               ${recommendedActionHtml}
+              <h4 class="detail-subheading">Risk summary</h4>
+              <p>${escapeHtml(finding.riskSummary)}</p>
+              <h4 class="detail-subheading">Next action</h4>
+              <p>${escapeHtml(finding.nextAction)}</p>
             </div>
           </div>
         </td>
@@ -552,7 +599,29 @@ function renderNotices(notes: string[], warnings: string[]): string {
 </div>`;
 }
 
-function renderFixPlan(plan: SuggestedFixCommandPlan | null): string {
+export function renderSkippedSection(plan: SuggestedFixCommandPlan | null): string {
+  if (!plan || plan.skipped.length === 0) return "";
+
+  const skippedRows = plan.skipped.map(s => `
+    <div class="skipped-row">
+      <span class="skipped-pkg">${escapeHtml(s.package)}@${escapeHtml(s.version)}</span>
+      <span class="skipped-rel ${escapeHtml(s.relationship)}">${escapeHtml(s.relationship)}</span>
+      <span class="skipped-reason">${escapeHtml(s.reason)}</span>
+    </div>`).join("\n");
+
+  return `<div class="fix-plan">
+  <div class="fix-plan-header">
+    <h2><span class="icon">⊘</span> Skipped findings</h2>
+    <button class="skipped-toggle" onclick="toggleSkipped()">↑ collapse</button>
+  </div>
+  <div class="skipped-section open" id="skipped-section">
+    <div style="font-size:11px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Why were these skipped?</div>
+    ${skippedRows}
+  </div>
+</div>`;
+}
+
+export function renderFixPlan(plan: SuggestedFixCommandPlan | null): string {
   if (!plan || plan.sections.length === 0) return "";
 
   const directCount = plan.targets.filter(t => t.kind === "direct").length;
@@ -590,21 +659,8 @@ function renderFixPlan(plan: SuggestedFixCommandPlan | null): string {
     </div>${targetsHtml}`;
   }).join("\n");
 
-  const skippedRows = plan.skipped.map(s => `
-    <div class="skipped-row">
-      <span class="skipped-pkg">${escapeHtml(s.package)}@${escapeHtml(s.version)}</span>
-      <span class="skipped-rel ${escapeHtml(s.relationship)}">${escapeHtml(s.relationship)}</span>
-      <span class="skipped-reason">${escapeHtml(s.reason)}</span>
-    </div>`).join("\n");
-
-  const skippedSection = skippedCount > 0 ? `
-  <div class="skipped-section" id="skipped-section">
-    <div style="font-size:11px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Why were these skipped?</div>
-    ${skippedRows}
-  </div>` : "";
-
   const skippedBadgePart = skippedCount > 0
-    ? ` · <button class="skipped-toggle" onclick="toggleSkipped()">↓ ${skippedCount} skipped</button>`
+    ? ` · <span style="color:#8b949e">${skippedCount} skipped ⊘</span>`
     : "";
 
   const coverageText = plan.coveredFindingCount === plan.totalFindingCount
@@ -617,7 +673,7 @@ function renderFixPlan(plan: SuggestedFixCommandPlan | null): string {
     <span class="badge">${directCount} direct ${pluralize(directCount, "fix", "fixes")}${skippedBadgePart}</span>
   </div>
   <div class="fix-commands">${commandRows}
-  </div>${skippedSection}
+  </div>
   <div style="padding:10px 18px;border-top:1px solid #21262d;font-size:11px;color:#8b949e">${coverageText}</div>
 </div>`;
 }
@@ -627,13 +683,25 @@ export async function writeHtmlReport(params: {
   data: ReportData;
   autoOpen: boolean;
 }): Promise<{ reportPath: string }> {
-  fs.mkdirSync(params.outputDir, { recursive: true });
+  const dirExisted = fs.existsSync(params.outputDir);
+  try {
+    fs.mkdirSync(params.outputDir, { recursive: true });
+  } catch (err) {
+    throw new Error(`Failed to create report directory ${params.outputDir}: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+  }
 
   const indexPath = path.join(params.outputDir, "index.html");
   const jsonPath = path.join(params.outputDir, "report.json");
 
-  fs.writeFileSync(jsonPath, JSON.stringify(params.data, null, 2), "utf8");
-  fs.writeFileSync(indexPath, renderHtmlReport(params.data), "utf8");
+  try {
+    fs.writeFileSync(jsonPath, JSON.stringify(params.data, null, 2), "utf8");
+    fs.writeFileSync(indexPath, renderHtmlReport(params.data), "utf8");
+  } catch (err) {
+    if (!dirExisted) {
+      try { fs.rmSync(params.outputDir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
+    }
+    throw new Error(`Failed to write HTML report to ${params.outputDir}: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+  }
 
   if (params.autoOpen) {
     openInBrowser(indexPath);
@@ -642,7 +710,7 @@ export async function writeHtmlReport(params: {
   return { reportPath: indexPath };
 }
 
-function openInBrowser(filePath: string): void {
+export function openInBrowser(filePath: string): void {
   if (!path.isAbsolute(filePath)) return;
 
   const cmd = process.platform === "darwin"

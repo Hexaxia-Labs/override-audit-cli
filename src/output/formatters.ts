@@ -2,7 +2,12 @@ import type { Finding } from "../types.js";
 import type { SuggestedFixCommandPlan } from "../remediation/fix-commands.js";
 import { findSuggestedCommandForFinding } from "../remediation/fix-commands.js";
 import { chalk } from "../utils/chalk.js";
-import { severityOrder } from "../constants.js";
+import {
+  severityOrder,
+  MAL_PRIVATE_REGISTRY_MESSAGE,
+  MAL_GIT_SOURCE_PINNED_MESSAGE,
+  MAL_GIT_SOURCE_FLOATING_MESSAGE,
+} from "../constants.js";
 import { loadCache } from "../osv/cache.js";
 import { inferSeverity } from "../osv/severity.js";
 import { getPrimaryParent } from "../utils/finding.js";
@@ -25,6 +30,11 @@ export function formatRelationshipLabel(value: string): string {
   return chalk.gray(value);
 }
 
+export function formatRelLabel(finding: { relationship: string; pkg: { dev?: boolean } }): string {
+  const base = finding.relationship;
+  return finding.pkg.dev === true ? `${base} · dev` : base;
+}
+
 export function formatAdvisorySourceLine(sourceLabel: string): string {
   const match = sourceLabel.match(/^(.*) \((.*)\)$/);
   if (!match) {
@@ -41,6 +51,9 @@ function isMaliciousAdvisory(finding: Finding): boolean {
 
 export function getRecommendedAction(finding: Finding): string {
   if (isMaliciousAdvisory(finding)) {
+    if (finding.maliciousUnverifiable) {
+      return MAL_PRIVATE_REGISTRY_MESSAGE;
+    }
     return finding.relationship === "direct"
       ? "This package has a malicious code advisory. Remove it from your dependencies."
       : "This package has a malicious code advisory. Upgrade or remove the parent package that pulls it in.";
@@ -114,6 +127,14 @@ export function getRecommendedAction(finding: Finding): string {
 }
 
 export function summarizeRisk(finding: Finding): string {
+  if (finding.maliciousUnverifiable) {
+    return MAL_PRIVATE_REGISTRY_MESSAGE;
+  }
+  if (finding.maliciousGitSource) {
+    return finding.maliciousGitSourcePinned
+      ? MAL_GIT_SOURCE_PINNED_MESSAGE
+      : MAL_GIT_SOURCE_FLOATING_MESSAGE;
+  }
   let risk = "";
   if (finding.severity === "critical" && finding.relationship === "direct") {
     risk = "Critical direct dependency. Prioritize this first because the project controls it directly.";
@@ -186,6 +207,9 @@ export function summarizeNextAction(finding: Finding): string {
   const directTarget = finding.validatedFirstFixedVersion ?? finding.firstFixedVersion;
 
   if (isMaliciousAdvisory(finding)) {
+    if (finding.maliciousUnverifiable) {
+      return MAL_PRIVATE_REGISTRY_MESSAGE;
+    }
     return finding.relationship === "direct"
       ? "This package has a malicious code advisory. Remove it from your dependencies."
       : "This package has a malicious code advisory. Upgrade or remove the parent package that pulls it in.";
@@ -225,6 +249,7 @@ export function serializeFinding(finding: Finding, plan?: SuggestedFixCommandPla
     version: finding.pkg.version,
     severity: finding.severity,
     relationship: finding.relationship,
+    dev: finding.pkg.dev ?? false,
     firstFixedVersion: finding.firstFixedVersion,
     validatedFirstFixedVersion: finding.validatedFirstFixedVersion ?? null,
     fixVersionValidationNote: finding.fixVersionValidationNote ?? null,
@@ -238,6 +263,9 @@ export function serializeFinding(finding: Finding, plan?: SuggestedFixCommandPla
     cves: finding.cveAliases,
     dependencyPaths: finding.dependencyPaths,
     usage: finding.usage ?? null,
+    maliciousUnverifiable: finding.maliciousUnverifiable ?? false,
+    maliciousGitSource: finding.maliciousGitSource ?? false,
+    maliciousGitSourcePinned: finding.maliciousGitSourcePinned ?? false,
     vulnerabilities: finding.vulnerabilities.map(v => ({
       id: v.id,
       aliases: v.aliases ?? [],

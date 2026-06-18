@@ -1,0 +1,18 @@
+# yarn lockfile v1
+
+
+aws-amplify@6.16.3:
+  version "6.16.3"
+  resolved "https://registry.npmjs.org/aws-amplify/-/aws-amplify-6.16.3.tgz"
+  dependencies:
+    "@aws-amplify/core" "6.16.1"
+
+"@aws-amplify/core@6.16.1":
+  version "6.16.1"
+  resolved "https://registry.npmjs.org/@aws-amplify/core/-/core-6.16.1.tgz"
+  dependencies:
+    js-cookie "^3.0.5"
+
+js-cookie@^3.0.5:
+  version "3.0.6"
+  resolved "https://registry.npmjs.org/js-cookie/-/js-cookie-3.0.6.tgz"

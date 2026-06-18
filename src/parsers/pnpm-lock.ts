@@ -2,7 +2,7 @@ import fs from "node:fs";
 import YAML from "yaml";
 import type { PackageRef } from "../types.js";
 import { looksLikeVersion, normalizeRawVersion } from "../utils/version.js";
-import { upsertPackage } from "./utils.js";
+import { upsertPackage, markDevPackages } from "./utils.js";
 import { uniquePathArrays } from "../utils/array.js";
 
 const MAX_PATHS_PER_PACKAGE = 5;
@@ -59,7 +59,8 @@ function loadLegacy(parsed: any, prodOnly: boolean): PackageRef[] {
     graph.set(ref.key, [...depKeys]);
     const dev = !!meta?.dev;
     if (prodOnly && dev) continue;
-    upsertPackage(map, { name: ref.name, version: ref.version, ecosystem: "npm", dev, paths: [] });
+    const resolvedUrl = meta?.resolution?.tarball as string | undefined;
+    upsertPackage(map, { name: ref.name, version: ref.version, ecosystem: "npm", dev, paths: [], resolvedUrl });
   }
 
   const rootDeps: string[] = [];
@@ -98,6 +99,15 @@ function loadV9(parsed: any, prodOnly: boolean): PackageRef[] {
   const graph = new Map<string, string[]>();
   const map = new Map<string, PackageRef>();
 
+  const packagesMetaSection = parsed?.packages ?? {};
+  const resolutionUrls = new Map<string, string>();
+  for (const [key, pkgMeta] of Object.entries<any>(packagesMetaSection)) {
+    const ref = parsePnpmPackageKeyV9(String(key));
+    if (!ref) continue;
+    const tarball = pkgMeta?.resolution?.tarball as string | undefined;
+    if (tarball) resolutionUrls.set(ref.key, tarball);
+  }
+
   for (const [key, meta] of Object.entries<any>(snapshotsSection)) {
     const ref = parsePnpmPackageKeyV9(String(key));
     if (!ref) continue;
@@ -114,16 +124,20 @@ function loadV9(parsed: any, prodOnly: boolean): PackageRef[] {
     graph.set(ref.key, [...depKeys]);
     const dev = !!meta?.dev;
     if (prodOnly && dev) continue;
-    upsertPackage(map, { name: ref.name, version: ref.version, ecosystem: "npm", dev, paths: [] });
+    upsertPackage(map, { name: ref.name, version: ref.version, ecosystem: "npm", dev, paths: [], resolvedUrl: resolutionUrls.get(ref.key) });
   }
 
   const rootDeps: string[] = [];
+  const devDepNames = new Set<string>();
   for (const importer of Object.values<any>(importers)) {
     for (const depSectionName of ["dependencies", "optionalDependencies", "devDependencies"]) {
       if (prodOnly && depSectionName === "devDependencies") continue;
       const depSection = importer?.[depSectionName];
       if (!depSection || typeof depSection !== "object") continue;
       for (const [depName, depRef] of Object.entries<any>(depSection)) {
+        if (depSectionName === "devDependencies") {
+          devDepNames.add(String(depName));
+        }
         const resolved = normalizePnpmDepRefV9(String(depName), depRef);
         if (resolved) {
           rootDeps.push(resolved);
@@ -143,6 +157,7 @@ function loadV9(parsed: any, prodOnly: boolean): PackageRef[] {
   }
 
   collectPnpmPaths(rootDeps, graph, map, parsePnpmPackageKeyV9);
+  markDevPackages(map, devDepNames);
 
   return [...map.values()];
 }
@@ -156,8 +171,9 @@ function collectPnpmPaths(
   const queue = rootDeps.map(dep => ({ key: dep, path: ["project"] as string[] }));
   const visitedStates = new Set<string>();
 
-  while (queue.length > 0) {
-    const current = queue.shift()!;
+  let head = 0;
+  while (head < queue.length) {
+    const current = queue[head++]!;
     const ref = parsePackageKey(current.key);
     if (!ref) continue;
 

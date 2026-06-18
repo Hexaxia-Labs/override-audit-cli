@@ -1,6 +1,6 @@
 # Contributing to CVE Lite CLI
 
-CVE Lite CLI is an [OWASP Incubator Project](https://owasp.org/cve-lite-cli/) and welcomes contributions from the community.
+CVE Lite CLI is an [OWASP Lab Project](https://owasp.org/cve-lite-cli/) and welcomes contributions from the community.
 
 ## Voluntary contributions
 
@@ -27,6 +27,18 @@ All contributions to this project are voluntary and unpaid. By opening a pull re
 - A maintainer will review your PR, typically within a few days.
 - If changes are requested, address the feedback and push to the same branch.
 - If your branch falls behind main, rebase it: `git fetch origin && git rebase origin/main && git push --force-with-lease`.
+
+## Case studies
+
+Case studies document real-world scans of popular open-source projects. The portfolio covers all major lockfile types (npm, pnpm, Yarn Berry, Bun) and a range of project sizes and sectors.
+
+A new case study proposal is only accepted if it meets at least one of the following:
+
+1. **New lockfile type** - uses a lockfile type not yet covered in the existing portfolio
+2. **New sector** - covers a sector genuinely not yet represented, such as government, healthcare, finance, or hardware (a different kind of developer tool or AI framework does not qualify)
+3. **Exceptional gap vs native audit** - the scan reveals a meaningful difference compared to the equivalent package manager audit tool (e.g. the native tool returns zero findings and CVE Lite finds something real, or the deduplication difference is dramatic), documented side-by-side in the study
+
+Before opening a case study issue, scan the project locally with `cve-lite . --verbose` and confirm it meets at least one criterion above. Case study PRs must not edit shared files (`website/docs/case-studies/index.md`, `website/sidebars.ts`, `README.md`, `examples/readme.md`, `CHANGELOG.md`) - those are updated by maintainers post-merge.
 
 ## Reporting bugs
 

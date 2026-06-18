@@ -22,7 +22,8 @@ type UpdateCache = {
 
 export function isNewer(latest: string, current: string): boolean {
   const parse = (v: string): number[] => {
-    const parts = v.replace(/^v/, "").split(".").map(Number);
+    const core = v.replace(/^v/, "").split("-")[0];
+    const parts = core.split(".").map(Number);
     return parts.length === 3 && parts.every(n => !isNaN(n)) ? parts : [];
   };
   const l = parse(latest);

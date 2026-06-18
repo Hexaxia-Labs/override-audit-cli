@@ -16,10 +16,13 @@ export async function resolveRecommendedParentUpgrade(
   const viaPath = getBestPath(finding);
   if (!viaPath || viaPath.length < 3) return null;
 
+  const packagesByName = new Map(packages.map(p => [p.name, p]));
+
   const directParentContext = resolveDirectParentContext(
     viaPath,
     packages,
     directDependencyNames,
+    packagesByName,
   );
   if (!directParentContext) return null;
 
@@ -68,13 +71,14 @@ function getBestPath(finding: Finding): string[] | null {
 function findDirectDependency(
   packages: PackageRef[],
   name: string,
-  directDependencyNames?: ReadonlySet<string> | null,
+  directDependencyNames: ReadonlySet<string> | null | undefined,
+  packagesByName: Map<string, PackageRef>,
 ): PackageRef | null {
+  if (directDependencyNames?.has(name)) {
+    return packagesByName.get(name) ?? null;
+  }
   for (const pkg of packages) {
     if (pkg.name !== name) continue;
-    if (directDependencyNames?.has(name)) {
-      return pkg;
-    }
     const paths = pkg.paths ?? [];
     if (paths.some(path => path.at(-1) === name && path.length >= 2)) {
       return pkg;
@@ -86,7 +90,8 @@ function findDirectDependency(
 function resolveDirectParentContext(
   viaPath: string[],
   packages: PackageRef[],
-  directDependencyNames?: ReadonlySet<string> | null,
+  directDependencyNames: ReadonlySet<string> | null | undefined,
+  packagesByName: Map<string, PackageRef>,
 ): { directParentName: string; immediateParentName: string; directParent: PackageRef } | null {
   const immediateParentName = viaPath[viaPath.length - 2];
   const candidateSegments = viaPath.slice(1, -1);
@@ -98,7 +103,7 @@ function resolveDirectParentContext(
   const directParentName = directParentCandidates[0];
   if (!directParentName) return null;
 
-  const directParent = findDirectDependency(packages, directParentName, directDependencyNames);
+  const directParent = findDirectDependency(packages, directParentName, directDependencyNames, packagesByName);
   if (!directParent) return null;
 
   return { directParentName, immediateParentName, directParent };
@@ -109,6 +114,10 @@ function findPackageVersion(
   name: string,
   pathPrefix: string[],
 ): string | null {
+  // Cannot use a name-keyed Map here: when the same package is installed at
+  // multiple versions (e.g. lodash@3 and lodash@4 on different paths), a Map
+  // would only hold one entry. We need path-aware iteration across all installed
+  // versions to find the right one for this specific dependency chain.
   for (const pkg of packages) {
     if (pkg.name !== name) continue;
     const paths = pkg.paths ?? [];

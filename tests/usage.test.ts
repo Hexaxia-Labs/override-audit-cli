@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { scanProjectForPackageUsage } from "../src/usage/scanner.js";
+import { removeDir } from "./test-utils.js";
 
 describe("scanProjectForPackageUsage", () => {
   let tempDir: string;
@@ -11,7 +12,7 @@ describe("scanProjectForPackageUsage", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    removeDir(tempDir);
   });
 
   function createTestFile(filePath: string, content: string) {

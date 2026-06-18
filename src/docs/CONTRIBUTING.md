@@ -167,6 +167,27 @@ Practical exceptions:
 - Reuse the existing helpers (`createFinding`, `createScanInputForSource`, and similar) where applicable so test setup stays consistent.
 - One concern per `it(...)` block. A test description that needs three "and"s is doing too much.
 
+## Case study contributions
+
+When adding a case study, only touch files specific to your study. Do not modify the shared index files — maintainers update those when merging.
+
+**Files you should add or change:**
+
+- `website/docs/case-studies/<your-project>.md` — the case study document
+- `examples/<your-project>/` — the lockfile fixture (package.json + lockfile)
+- `website/static/img/<your-project>-logo.svg` — the project logo
+
+**Files you must NOT touch:**
+
+- `website/docs/case-studies/index.md` — maintained by project maintainers
+- `website/sidebars.ts` — maintained by project maintainers
+- `README.md` — maintained by project maintainers
+- `examples/readme.md` — maintained by project maintainers
+- `CHANGELOG.md` — maintained at release time, never by contributors
+- `package.json` or `package-lock.json` — not part of documentation work
+
+Touching the shared files causes merge conflicts when multiple case study PRs are open at the same time. The maintainers add your study to the index, sidebar, and README when merging.
+
 ## Pull request guidelines
 
 Please try to keep pull requests focused.

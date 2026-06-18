@@ -933,3 +933,14 @@ body {
     font-size: 22px;
   }
 }
+
+/* Mermaid edge label padding */
+.edgeLabel .label {
+  background-color: #1b2434 !important;
+  border-radius: 4px !important;
+}
+
+.edgeLabel p {
+  padding: 3px 8px !important;
+  margin: 0 !important;
+}

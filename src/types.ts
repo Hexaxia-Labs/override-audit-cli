@@ -6,6 +6,7 @@ export type PackageRef = {
   ecosystem: string;
   dev?: boolean;
   paths?: string[][];
+  resolvedUrl?: string;
 };
 
 export type NpmLockNode = {
@@ -135,6 +136,9 @@ export type Finding = {
     imported: boolean;
     files: string[];
   };
+  maliciousUnverifiable?: boolean;
+  maliciousGitSource?: boolean;
+  maliciousGitSourcePinned?: boolean;
 };
 
 export type QueryCacheEntry = { vulnIds: string[]; cachedAt: string };
@@ -153,6 +157,18 @@ export type Spinner = {
   stop: () => void;
 };
 
+export type BaselineEntry = {
+  name: string;
+  version: string;
+  advisoryIds: string[];
+};
+
+export type Baseline = {
+  version: 1;
+  createdAt: string;
+  findings: BaselineEntry[];
+};
+
 export type CliCommand = "scan" | "advisories-sync" | "install-skill" | "config" | "overrides";
 
 export type ParsedOptions = {
@@ -161,6 +177,9 @@ export type ParsedOptions = {
   debug?: boolean;
   verbose?: boolean;
   fix?: boolean;
+  ratchet?: boolean;
+  createPr?: boolean;
+  prBase?: string;
   prodOnly?: boolean;
   failOn: string;
   batchSize: string;

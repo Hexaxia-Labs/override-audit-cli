@@ -1,0 +1,11 @@
+﻿{
+  "name": "cve-lite-example-multiple-versions-same-pkg",
+  "version": "1.0.0",
+  "private": true,
+  "description": "npm regression fixture: lodash@3.10.1 (via karma) and lodash@4.17.20 (direct) — same package at two versions, each must be a separate finding.",
+  "license": "MIT",
+  "dependencies": {
+    "karma": "1.7.1",
+    "lodash": "4.17.20"
+  }
+}

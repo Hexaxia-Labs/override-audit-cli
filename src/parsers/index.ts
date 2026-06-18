@@ -23,7 +23,7 @@ export function loadPackages(projectRoot: string, prodOnly: boolean, maxDepth: n
       packages: loadFromBunLock(rootBunLock, prodOnly),
       notes: [
         "Scanned resolved dependency versions from bun.lock.",
-        "Dependency paths are approximated from the workspace dependency manifest."
+        "Dependency paths are derived from bun.lock package relationships."
       ],
       warnings: [],
       skippedDependencies: []
@@ -83,7 +83,7 @@ export function loadPackages(projectRoot: string, prodOnly: boolean, maxDepth: n
       packages: loadFromYarnLock(rootYarnLock),
       notes: [
         "Scanned resolved dependency versions from yarn.lock.",
-        "Dependency path reconstruction is limited for Yarn Classic lockfiles in this MVP."
+        "Dependency paths are derived from yarn.lock package relationships."
       ],
       warnings: [],
       skippedDependencies: []
@@ -102,9 +102,10 @@ export function loadPackages(projectRoot: string, prodOnly: boolean, maxDepth: n
         packages: loadFromBunLock(selected, prodOnly),
         notes: [
           `Scanned resolved dependency versions from ${relativeOrName(projectRoot, selected)}.`,
-          "Dependency paths are approximated from the workspace dependency manifest."
+          "Dependency paths are derived from bun.lock package relationships.",
+          "No supported lockfile was found at the repo root — a nested lockfile was used instead."
         ],
-        warnings: ["No supported lockfile was found at the repo root, so a nested lockfile was used instead."],
+        warnings: [],
         skippedDependencies: []
       };
     }
@@ -116,9 +117,10 @@ export function loadPackages(projectRoot: string, prodOnly: boolean, maxDepth: n
         packages: loadFromPackageLock(selected, prodOnly),
         notes: [
           `Scanned resolved dependency versions from ${relativeOrName(projectRoot, selected)}.`,
-          "Dependency paths are derived from lockfile package locations."
+          "Dependency paths are derived from lockfile package locations.",
+          "No supported lockfile was found at the repo root — a nested lockfile was used instead."
         ],
-        warnings: ["No supported lockfile was found at the repo root, so a nested lockfile was used instead."],
+        warnings: [],
         skippedDependencies: []
       };
     }
@@ -130,9 +132,10 @@ export function loadPackages(projectRoot: string, prodOnly: boolean, maxDepth: n
         packages: loadFromPackageLock(selected, prodOnly),
         notes: [
           `Scanned resolved dependency versions from ${relativeOrName(projectRoot, selected)}.`,
-          "Dependency paths are derived from lockfile package locations."
+          "Dependency paths are derived from lockfile package locations.",
+          "No supported lockfile was found at the repo root — a nested lockfile was used instead."
         ],
-        warnings: ["No supported lockfile was found at the repo root, so a nested lockfile was used instead."],
+        warnings: [],
         skippedDependencies: []
       };
     }
@@ -144,9 +147,10 @@ export function loadPackages(projectRoot: string, prodOnly: boolean, maxDepth: n
         packages: loadFromPnpmLock(selected, prodOnly),
         notes: [
           `Scanned resolved dependency versions from ${relativeOrName(projectRoot, selected)}.`,
-          "Dependency paths are approximated from importer relationships and package snapshots."
+          "Dependency paths are approximated from importer relationships and package snapshots.",
+          "No supported lockfile was found at the repo root — a nested lockfile was used instead."
         ],
-        warnings: ["No supported lockfile was found at the repo root, so a nested lockfile was used instead."],
+        warnings: [],
         skippedDependencies: []
       };
     }
@@ -157,9 +161,10 @@ export function loadPackages(projectRoot: string, prodOnly: boolean, maxDepth: n
       packages: loadFromYarnLock(selected),
       notes: [
         `Scanned resolved dependency versions from ${relativeOrName(projectRoot, selected)}.`,
-        "Dependency path reconstruction is limited for Yarn Classic lockfiles in this MVP."
+        "Dependency paths are derived from yarn.lock package relationships.",
+        "No supported lockfile was found at the repo root — a nested lockfile was used instead."
       ],
-      warnings: ["No supported lockfile was found at the repo root, so a nested lockfile was used instead."],
+      warnings: [],
       skippedDependencies: []
     };
   }

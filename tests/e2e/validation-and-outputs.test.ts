@@ -47,7 +47,8 @@ describe("validation conflicts", () => {
   const cases: Array<{ name: string; args: string[]; phrase: string }> = [
     { name: "--fix --json", args: ["--fix", "--json"], phrase: "--fix cannot be used with --json" },
     { name: "--report --json", args: ["--report", "./r", "--json"], phrase: "--report cannot be used with --json" },
-    { name: "--sarif --report", args: ["--sarif", "--report", "./r"], phrase: "cannot combine --sarif and --report" },
+    // Note: as of cve-lite 1.24.0, --sarif and --report can be combined (both files are written),
+    // so that pairing is no longer a validation conflict.
     { name: "--cdx --report", args: ["--cdx", "--report", "./r"], phrase: "cannot combine --cdx and --report" },
     { name: "--offline --osv-url", args: ["--offline", "--osv-url", "https://x"], phrase: "--offline/--offline-db cannot be used with --osv-url" },
     { name: "--no-cache --offline", args: ["--no-cache", "--offline"], phrase: "--no-cache cannot be used with --offline or --offline-db" },

@@ -22,7 +22,7 @@ This writes a timestamped file (`cve-lite-scan-<timestamp>.sarif`) to the curren
 cve-lite . --sarif --json
 ```
 
-`--sarif` cannot be combined with `--report`.
+`--sarif` can be combined with `--report --no-open` to write both a SARIF file and an HTML report in one scan - useful for CI pipelines that upload to GitHub Code Scanning and also attach an HTML artifact for human review.
 
 ## GitHub Code Scanning integration
 

@@ -66,7 +66,13 @@ import {
 import { createAuditLog } from "./audit-log/index.js";
 import { audit, buildOverrideContext } from "./overrides/index.js";
 import type { OverrideFinding } from "./overrides/types.js";
-
+import { hasRootLockfile, findNestedLockfiles } from "./parsers/multi-package.js";
+import { handleMultiFolderScan } from "./scan/multi-folder-scan.js";
+import {
+  createPullRequestForFixes,
+  findingsMeetFailOnThreshold,
+} from "./utils/create-pr.js";
+import { readBaseline, writeBaseline, filterNewFindings } from "./utils/baseline.js";
 let parsedArgs: ReturnType<typeof parseArgs> | null = null;
 try {
   parsedArgs = parseArgs(process.argv.slice(2));
@@ -212,7 +218,15 @@ if (parsedArgs) {
 
     validateOptions(options);
 
-    let advisorySourceLine: string;
+    // Multi-folder mode: if no root lockfile and 2+ nested lockfiles exist,
+    // route to dedicated multi-folder handler instead of single-lockfile scan
+    const nestedLockfiles = findNestedLockfiles(projectPath, searchDepth);
+    if (!hasRootLockfile(projectPath) && nestedLockfiles.length >= 2) {
+      await handleMultiFolderScan({ projectRoot: projectPath, batchSize, options });
+      return;
+    }
+
+    let advisorySourceLine = "";
     let advisoryDbFreshnessLine: string | null = null;
     let advisoryDbWarning: string | null = null;
     try {
@@ -246,11 +260,13 @@ if (parsedArgs) {
       throw error;
     }
 
-    if (!options.json) {
+    if (!options.json && !options.ratchet) {
       if (options.offline || options.offlineDb) {
         console.log(chalk.gray("Offline mode:") + " " + chalk.yellow("enabled") + " " + chalk.gray("(no external advisory calls will be made)"));
       }
-      console.log(`${chalk.gray("Advisory source:")} ${formatAdvisorySourceLine(advisorySourceLine)}`);
+      if (advisorySourceLine) {
+        console.log(`${chalk.gray("Advisory source:")} ${formatAdvisorySourceLine(advisorySourceLine)}`);
+      }
       if (advisoryDbFreshnessLine) {
         console.log(`${chalk.gray("Advisory DB freshness:")} ${advisoryDbFreshnessLine}`);
       }
@@ -290,13 +306,15 @@ if (parsedArgs) {
       },
     });
 
-    logInfo(
-      `Parsed ${packages.length} ${pluralize(packages.length, "package")} from ${scanInput.source}${
-        scanInput.filePath ? ` (${path.relative(projectPath, scanInput.filePath) || path.basename(scanInput.filePath)})` : ""
-      }`,
-      options
-    );
-    printCacheSummary(options.cacheDir, options);
+    if (!options.ratchet) {
+      logInfo(
+        `Parsed ${packages.length} ${pluralize(packages.length, "package")} from ${scanInput.source}${
+          scanInput.filePath ? ` (${path.relative(projectPath, scanInput.filePath) || path.basename(scanInput.filePath)})` : ""
+        }`,
+        options
+      );
+      printCacheSummary(options.cacheDir, options);
+    }
 
     if (scanInput.warnings.length > 0) {
       for (const warning of scanInput.warnings) {
@@ -320,6 +338,7 @@ if (parsedArgs) {
       return;
     }
 
+    if (!options.json && !options.ratchet) console.log();
     let scanState = await scanProject({
       scanInput,
       batchSize,
@@ -327,8 +346,11 @@ if (parsedArgs) {
       projectPath,
       debugLog,
     });
-    const findingsBeforeFix = scanState.sorted.length;
+    const findingsBeforeFixList = scanState.sorted;
+    const findingsBeforeFix = findingsBeforeFixList.length;
     let fixResult: FixExecutionResult | null = null;
+    let baseline = readBaseline(projectArg ?? ".");
+    let suppressedCount = 0;
 
     // Collect override findings if --check-overrides is set
     let overrideFindings: OverrideFinding[] = [];
@@ -464,7 +486,50 @@ if (parsedArgs) {
         findingsAfterFix: scanState.sorted.length,
         remainingBySeverity: countBySeverity(scanState.sorted),
       });
+
+      if (options.createPr && fixResult) {
+        if (fixResult.appliedFixCount === 0) {
+          logWarn("Skipping pull request creation: no direct fixes were applied.", options);
+        } else {
+          console.log("");
+          console.log(chalk.bold.cyan("Creating pull request (--create-pr)"));
+          const prResult = await createPullRequestForFixes({
+            projectPath,
+            baseBranch: options.prBase ?? "main",
+            fixResult,
+            findingsBeforeFix: findingsBeforeFixList,
+            findingsAfterFix: scanState.sorted,
+          });
+          if (prResult.skipped) {
+            logWarn(prResult.skipReason ?? "Pull request was not created.", options);
+          } else if (prResult.prUrl) {
+            console.log(`${chalk.gray("Pull request:")} ${chalk.cyan(prResult.prUrl)}`);
+            console.log(`${chalk.gray("Branch:")} ${chalk.cyan(prResult.branchName)}`);
+          } else {
+            logWarn(`Branch ${prResult.branchName} was pushed, but no pull request URL was returned.`, options);
+          }
+        }
+      }
     } else {
+      // --ratchet: save baseline and exit 0
+      if (options.ratchet) {
+        writeBaseline(projectArg ?? ".", scanState.sorted);
+        const count = scanState.sorted.length;
+        console.log(chalk.green(`✓ Baseline saved to .cve-lite/baseline.json with ${count} ${count === 1 ? "finding" : "findings"}. Future scans will only report findings above this baseline.`));
+        process.exit(0);
+        return;
+      }
+
+      // auto-apply baseline if it exists - filter before output
+      if (baseline) {
+        const filtered = filterNewFindings(scanState.sorted, baseline);
+        scanState.sorted = filtered.newFindings;
+        scanState.tableFindings = scanState.tableFindings.filter(f =>
+          filtered.newFindings.some(nf => nf.pkg.name === f.pkg.name && nf.pkg.version === f.pkg.version)
+        );
+        suppressedCount = filtered.suppressedCount;
+      }
+
       await writeOutputs(options, {
         sorted: scanState.sorted,
         allPackages: scanState.allPackages,
@@ -487,7 +552,10 @@ if (parsedArgs) {
           }
           if (scanState.sorted.length > 0) {
             if (scanState.tableFindings.length > 0) {
-              printTable(scanState.tableFindings, options.all ? null : scanState.minSeverity);
+              const skippedKeys = new Set(
+                (scanState.suggestedFixCommands?.skipped ?? []).map(s => `${s.package}@${s.version}`)
+              );
+              printTable(scanState.tableFindings, options.all ? null : scanState.minSeverity, skippedKeys);
             } else {
               logInfo(`No findings met the table threshold of ${scanState.minSeverity}. Re-run with --all to show everything.`, options);
             }
@@ -535,6 +603,14 @@ if (parsedArgs) {
       findings: scanState.sorted.length,
       packages: packages.length,
     });
+
+    if (baseline) {
+      if (scanState.sorted.length === 0) {
+        console.log(chalk.green(`No new findings above baseline - ${suppressedCount} existing ${suppressedCount === 1 ? "finding" : "findings"} suppressed`));
+      } else {
+        console.log(chalk.yellow(`${scanState.sorted.length} new ${scanState.sorted.length === 1 ? "finding" : "findings"} above baseline - ${suppressedCount} existing ${suppressedCount === 1 ? "finding" : "findings"} suppressed`));
+      }
+    }
 
     const failLevel = normalizeSeverity(options.failOn);
     const shouldFail = scanState.sorted.some(f => severityOrder[f.severity] >= severityOrder[failLevel]);

@@ -43,12 +43,24 @@ export async function resolveTransitiveRemediationViaRegistry(args: {
   if (!directParentContext) return null;
 
   const { directParentName, immediateParentName, directParent } = directParentContext;
-  if (directParentName !== immediateParentName) return null;
-
-  if (!looksLikeVersion(directParent.version)) return null;
-
   const vulnerableName = args.finding.pkg.name;
   const fixHint = args.finding.validatedFirstFixedVersion ?? args.finding.firstFixedVersion;
+
+  if (directParentName !== immediateParentName) {
+    const packagesByName = new Map(args.packages.map(p => [p.name, p]));
+    return resolveWithinRangeForDeepChainViaRegistry({
+      immediateParentName,
+      vulnerableName,
+      installedVersion: args.finding.pkg.version,
+      fixHint,
+      viaPath,
+      packages: args.packages,
+      packagesByName,
+      workspaceMap: args.workspaceMap,
+    });
+  }
+
+  if (!looksLikeVersion(directParent.version)) return null;
 
   const safeCandidates = await findSafeChildCandidates(
     vulnerableName,
@@ -110,10 +122,24 @@ export async function resolveNpmTransitiveRemediation(args: {
 
   const { directParentName, immediateParentName, directParent } = directParentContext;
   const vulnerableName = args.finding.pkg.name;
+  const fixHint = args.finding.validatedFirstFixedVersion ?? args.finding.firstFixedVersion;
 
-  // Task 3 keeps the graph-aware resolution focused on exact direct-child npm paths.
+  // For deeper chains (directParent → ... → immediateParent → vulnerable), check if the
+  // immediate parent's declared range for the vulnerable package already covers a safe version.
+  // If so, a lockfile refresh of the vulnerable package itself is sufficient.
   if (directParentName !== immediateParentName) {
-    return null;
+    const packagesByName = new Map(args.packages.map(p => [p.name, p]));
+    return resolveWithinRangeForDeepChain({
+      graph: args.graph,
+      immediateParentName,
+      vulnerableName,
+      installedVersion: args.finding.pkg.version,
+      fixHint,
+      viaPath,
+      packages: args.packages,
+      packagesByName,
+      offline: args.offline,
+    });
   }
 
   const parentNodeId = resolveParentNodeId({
@@ -124,8 +150,6 @@ export async function resolveNpmTransitiveRemediation(args: {
     childVersion: args.finding.pkg.version,
   });
   if (!parentNodeId) return null;
-
-  const fixHint = args.finding.validatedFirstFixedVersion ?? args.finding.firstFixedVersion;
   const safeCandidates = args.offline
     ? buildOfflineSafeCandidates(args.finding.pkg.version, fixHint)
     : await findSafeChildCandidates(
@@ -382,6 +406,103 @@ function satisfiesComparator(version: string, comparator: string): boolean {
 function parseCoreVersion(version: string): [number, number, number] {
   const [major = "0", minor = "0", patch = "0"] = version.split(/[+-]/)[0].split(".");
   return [Number(major), Number(minor), Number(patch)];
+}
+
+async function resolveWithinRangeForDeepChainViaRegistry(args: {
+  immediateParentName: string;
+  vulnerableName: string;
+  installedVersion: string;
+  fixHint: string | null;
+  viaPath: string[];
+  packages: PackageRef[];
+  packagesByName: Map<string, PackageRef>;
+  workspaceMap?: Map<string, string[]> | null;
+}): Promise<NpmTransitiveRemediation | null> {
+  const immediateParent = args.packagesByName.get(args.immediateParentName);
+  if (!immediateParent || !looksLikeVersion(immediateParent.version)) return null;
+
+  const safeCandidates = await findSafeChildCandidates(
+    args.vulnerableName,
+    args.installedVersion,
+    args.fixHint,
+  );
+  if (safeCandidates.length === 0) return null;
+
+  const packument = await fetchPackument(args.immediateParentName);
+  const parentManifest = packument?.versions?.[immediateParent.version];
+  const depRange =
+    parentManifest?.dependencies?.[args.vulnerableName] ??
+    parentManifest?.optionalDependencies?.[args.vulnerableName];
+
+  if (!depRange) return null;
+
+  const inRangeTarget = [...safeCandidates]
+    .sort(compareVersions)
+    .filter(version => versionSatisfiesRange(version, depRange))
+    .at(-1);
+
+  if (!inRangeTarget) return null;
+
+  const workspaces = collectWorkspacesFromAllPaths(
+    [args.viaPath],
+    args.workspaceMap,
+  );
+
+  return {
+    kind: "update-parent-within-range",
+    package: args.vulnerableName,
+    currentVersion: args.installedVersion,
+    targetChildVersion: inRangeTarget,
+    viaPath: args.viaPath,
+    reason: `${args.immediateParentName}@${immediateParent.version} already allows ${args.vulnerableName}@${inRangeTarget} within the current dependency range`,
+    workspaces,
+  };
+}
+
+async function resolveWithinRangeForDeepChain(args: {
+  graph: NpmTransitiveGraph;
+  immediateParentName: string;
+  vulnerableName: string;
+  installedVersion: string;
+  fixHint: string | null;
+  viaPath: string[];
+  packages: PackageRef[];
+  packagesByName: Map<string, PackageRef>;
+  offline?: boolean;
+}): Promise<NpmTransitiveRemediation | null> {
+  const immediateParent = args.packagesByName.get(args.immediateParentName);
+  if (!immediateParent || !looksLikeVersion(immediateParent.version)) return null;
+
+  const nodeIds = args.graph.nodeIdsFor(args.immediateParentName, immediateParent.version);
+  if (nodeIds.length === 0) return null;
+
+  const safeCandidates = args.offline
+    ? buildOfflineSafeCandidates(args.installedVersion, args.fixHint)
+    : await findSafeChildCandidates(args.vulnerableName, args.installedVersion, args.fixHint);
+
+  if (safeCandidates.length === 0) return null;
+
+  for (const nodeId of nodeIds) {
+    const inRangeTarget = findSafeVersionWithinParentRange({
+      graph: args.graph,
+      parentNodeId: nodeId,
+      childName: args.vulnerableName,
+      candidates: safeCandidates,
+    });
+
+    if (inRangeTarget) {
+      return {
+        kind: "update-parent-within-range",
+        package: args.vulnerableName,
+        currentVersion: args.installedVersion,
+        targetChildVersion: inRangeTarget,
+        viaPath: args.viaPath,
+        reason: `${args.immediateParentName}@${immediateParent.version} already allows ${args.vulnerableName}@${inRangeTarget} within the current dependency range`,
+      };
+    }
+  }
+
+  return null;
 }
 
 function collectWorkspacesFromAllPaths(

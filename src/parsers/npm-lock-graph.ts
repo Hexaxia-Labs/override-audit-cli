@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import type { NpmLockGraph, NpmLockNode } from "../types.js";
-import { unique, uniquePathArrays } from "../utils/array.js";
+import { unique } from "../utils/array.js";
 
 type RawLockPackage = {
   name?: string;
@@ -22,12 +22,12 @@ export function loadNpmLockGraph(
   const packages = raw?.packages;
   const rawPackages = isRecord(packages) ? (packages as Record<string, RawLockPackage>) : {};
   const nodesById = new Map<string, NpmLockNode>();
-  const nodeIdsByPackageKey = new Map<string, string[]>();
+  const nodeIdsByPackageKey = new Map<string, Set<string>>();
   const nodeIdByPackagePath = new Map<string, string>();
   const dependencyRangesByNodeId = new Map<string, Record<string, string>>();
   const resolutionBasePathsByNodeId = new Map<string, string[]>();
-  const parentNodeIdsByChildNodeId = new Map<string, string[]>();
-  const childNodeIdsByParentNodeId = new Map<string, string[]>();
+  const parentNodeIdsByChildNodeId = new Map<string, Set<string>>();
+  const childNodeIdsByParentNodeId = new Map<string, Set<string>>();
   const rangeByParentNodeId = new Map<string, Map<string, string>>();
   const pathSetByNodeId = new Map<string, Set<string>>();
 
@@ -35,9 +35,9 @@ export function loadNpmLockGraph(
     return createGraph({
       entryPackages: [],
       nodesById,
-      nodeIdsByPackageKey,
-      parentNodeIdsByChildNodeId,
-      childNodeIdsByParentNodeId,
+      nodeIdsByPackageKey: setsToArrays(nodeIdsByPackageKey),
+      parentNodeIdsByChildNodeId: setsToArrays(parentNodeIdsByChildNodeId),
+      childNodeIdsByParentNodeId: setsToArrays(childNodeIdsByParentNodeId),
       rangeByParentNodeId,
       pathSetByNodeId,
     });
@@ -65,7 +65,9 @@ export function loadNpmLockGraph(
       dev: !!meta?.dev,
     });
     nodeIdByPackagePath.set(packagePath, id);
-    nodeIdsByPackageKey.set(packageKey, [...(nodeIdsByPackageKey.get(packageKey) ?? []), id]);
+    const keySet = nodeIdsByPackageKey.get(packageKey) ?? new Set<string>();
+    keySet.add(id);
+    nodeIdsByPackageKey.set(packageKey, keySet);
     dependencyRangesByNodeId.set(id, collectDependencyRanges(resolveDependencySource(meta, rawPackages)));
     resolutionBasePathsByNodeId.set(id, resolveBasePaths(packagePath, meta));
   }
@@ -130,9 +132,9 @@ export function loadNpmLockGraph(
   return createGraph({
     entryPackages,
     nodesById,
-    nodeIdsByPackageKey,
-    parentNodeIdsByChildNodeId,
-    childNodeIdsByParentNodeId,
+    nodeIdsByPackageKey: setsToArrays(nodeIdsByPackageKey),
+    parentNodeIdsByChildNodeId: setsToArrays(parentNodeIdsByChildNodeId),
+    childNodeIdsByParentNodeId: setsToArrays(childNodeIdsByParentNodeId),
     rangeByParentNodeId,
     pathSetByNodeId,
   });
@@ -148,29 +150,52 @@ function createGraph(args: {
   pathSetByNodeId: Map<string, Set<string>>;
 }): NpmLockGraph {
   const entryPackages = Object.freeze([...unique(args.entryPackages)]);
+  const EMPTY_ARRAY: readonly string[] = Object.freeze([]);
+
+  // Pre-freeze all node objects so getNode() returns a pre-computed frozen copy
+  const frozenNodesById = new Map<string, Readonly<NpmLockNode>>();
+  for (const [id, node] of args.nodesById) {
+    frozenNodesById.set(id, Object.freeze({ ...node }));
+  }
+
+  // Pre-freeze all package-key -> nodeId arrays
+  const frozenNodeIdsByPackageKey = new Map<string, readonly string[]>();
+  for (const [key, ids] of args.nodeIdsByPackageKey) {
+    frozenNodeIdsByPackageKey.set(key, Object.freeze([...ids]));
+  }
+
+  // Pre-freeze all parent arrays
+  const frozenParentsByChild = new Map<string, readonly string[]>();
+  for (const [id, parents] of args.parentNodeIdsByChildNodeId) {
+    frozenParentsByChild.set(id, Object.freeze([...parents]));
+  }
+
+  // Pre-freeze all children arrays
+  const frozenChildrenByParent = new Map<string, readonly string[]>();
+  for (const [id, children] of args.childNodeIdsByParentNodeId) {
+    frozenChildrenByParent.set(id, Object.freeze([...children]));
+  }
 
   return {
     entryPackages,
     nodeIdsFor(name: string, version: string | null): readonly string[] {
-      return Object.freeze([...(args.nodeIdsByPackageKey.get(buildPackageKey(name, version)) ?? [])]);
+      return frozenNodeIdsByPackageKey.get(buildPackageKey(name, version)) ?? EMPTY_ARRAY;
     },
     getNode(nodeId: string): Readonly<NpmLockNode> | null {
-      const node = args.nodesById.get(nodeId);
-      return node ? Object.freeze({ ...node }) : null;
+      return frozenNodesById.get(nodeId) ?? null;
     },
     parentsFor(nodeId: string): readonly string[] {
-      return Object.freeze([...(args.parentNodeIdsByChildNodeId.get(nodeId) ?? [])]);
+      return frozenParentsByChild.get(nodeId) ?? EMPTY_ARRAY;
     },
     childrenFor(nodeId: string): readonly string[] {
-      return Object.freeze([...(args.childNodeIdsByParentNodeId.get(nodeId) ?? [])]);
+      return frozenChildrenByParent.get(nodeId) ?? EMPTY_ARRAY;
     },
     rangeFor(parentNodeId: string, childName: string): string | null {
       return args.rangeByParentNodeId.get(parentNodeId)?.get(childName) ?? null;
     },
     pathsFor(nodeId: string): string[][] {
-      const serializedPaths = [...(args.pathSetByNodeId.get(nodeId) ?? new Set<string>())]
+      return [...(args.pathSetByNodeId.get(nodeId) ?? new Set<string>())]
         .map((item) => item.split(">"));
-      return uniquePathArrays(serializedPaths);
     },
   };
 }
@@ -180,8 +205,8 @@ function resolveEdgesForParent(
   dependencyRanges: Record<string, string>,
   resolutionBasePaths: string[],
   nodeIdByPackagePath: Map<string, string>,
-  childNodeIdsByParentNodeId: Map<string, string[]>,
-  parentNodeIdsByChildNodeId: Map<string, string[]>,
+  childNodeIdsByParentNodeId: Map<string, Set<string>>,
+  parentNodeIdsByChildNodeId: Map<string, Set<string>>,
   rangeByParentNodeId: Map<string, Map<string, string>>,
 ): string[] {
   const resolvedChildNodeIds: string[] = [];
@@ -198,14 +223,13 @@ function resolveEdgesForParent(
     const parentNodeId = parentPackagePath ? nodeIdByPackagePath.get(parentPackagePath) : null;
     if (!parentNodeId) continue;
 
-    childNodeIdsByParentNodeId.set(
-      parentNodeId,
-      unique([...(childNodeIdsByParentNodeId.get(parentNodeId) ?? []), childNodeId]),
-    );
-    parentNodeIdsByChildNodeId.set(
-      childNodeId,
-      unique([...(parentNodeIdsByChildNodeId.get(childNodeId) ?? []), parentNodeId]),
-    );
+    const childSet = childNodeIdsByParentNodeId.get(parentNodeId) ?? new Set<string>();
+    childSet.add(childNodeId);
+    childNodeIdsByParentNodeId.set(parentNodeId, childSet);
+
+    const parentSet = parentNodeIdsByChildNodeId.get(childNodeId) ?? new Set<string>();
+    parentSet.add(parentNodeId);
+    parentNodeIdsByChildNodeId.set(childNodeId, parentSet);
 
     const rangesForParent = rangeByParentNodeId.get(parentNodeId) ?? new Map<string, string>();
     rangesForParent.set(dependencyName, range);
@@ -299,6 +323,14 @@ function rememberPath(pathSetByNodeId: Map<string, Set<string>>, nodeId: string,
   const existing = pathSetByNodeId.get(nodeId) ?? new Set<string>();
   existing.add(serialized);
   pathSetByNodeId.set(nodeId, existing);
+}
+
+function setsToArrays<K>(map: Map<K, Set<string>>): Map<K, string[]> {
+  const result = new Map<K, string[]>();
+  for (const [key, set] of map) {
+    result.set(key, [...set]);
+  }
+  return result;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

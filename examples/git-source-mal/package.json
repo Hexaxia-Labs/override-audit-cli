@@ -1,0 +1,10 @@
+{
+  "name": "cve-lite-example-git-source-mal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "node-ipc resolved from a pinned GitHub commit — MAL- advisory should show git source warning, not 'Remove immediately'.",
+  "license": "ISC",
+  "dependencies": {
+    "node-ipc": "9.2.3"
+  }
+}

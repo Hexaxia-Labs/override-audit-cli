@@ -50,7 +50,8 @@ export function loadFromPackageLock(filePath: string, prodOnly: boolean): Packag
       const nodeIds = graph.nodeIdsFor(name, version);
       const graphPaths = nodeIds.flatMap(id => graph.pathsFor(id));
       const paths = graphPaths.length > 0 ? graphPaths : [normalizeNodeModulesPath(pkgPath)];
-      upsertPackage(map, { name, version, ecosystem: "npm", dev, paths });
+      const resolvedUrl = meta?.resolved as string | undefined;
+      upsertPackage(map, { name, version, ecosystem: "npm", dev, paths, resolvedUrl });
     }
   }
 

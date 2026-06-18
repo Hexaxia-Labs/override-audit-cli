@@ -1,0 +1,31 @@
+lockfileVersion: '9.0'
+
+importers:
+  .:
+    dependencies:
+      vercel:
+        specifier: 32.0.0
+        version: 32.0.0
+
+packages:
+  vercel@32.0.0:
+    resolution: {integrity: sha512-placeholder}
+    engines: {node: '>= 16'}
+  '@vercel/remix-builder@2.0.0':
+    resolution: {integrity: sha512-placeholder}
+  '@vercel/remix-run-dev@1.16.1':
+    resolution: {integrity: sha512-placeholder}
+  vm2@3.9.19:
+    resolution: {integrity: sha512-placeholder}
+
+snapshots:
+  vercel@32.0.0:
+    dependencies:
+      '@vercel/remix-builder': 2.0.0
+  '@vercel/remix-builder@2.0.0':
+    dependencies:
+      '@remix-run/dev': '@vercel/remix-run-dev@1.16.1'
+  '@vercel/remix-run-dev@1.16.1':
+    dependencies:
+      vm2: 3.9.19
+  vm2@3.9.19: {}

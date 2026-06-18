@@ -1,0 +1,10 @@
+{
+  "name": "cve-lite-example-pnpm-aliased-chain",
+  "version": "1.0.0",
+  "private": true,
+  "description": "pnpm v9 regression fixture: deep transitive chain through an aliased intermediate (@remix-run/dev → @vercel/remix-run-dev) — path resolution and parent upgrade must stay correct.",
+  "license": "MIT",
+  "dependencies": {
+    "vercel": "32.0.0"
+  }
+}

@@ -167,6 +167,18 @@ describe("parseArgs", () => {
     expect(result.options.json).toBe(true);
     expect(result.options.sarif).toBe(true);
   });
+
+  it("allows --sarif combined with --report for dual CI output", () => {
+    const result = parseArgs(["--sarif", "--report", "./cve-report", "--no-open"]);
+    expect(result.options.sarif).toBe(true);
+    expect(result.options.report).toBe("./cve-report");
+    expect(result.options.noOpen).toBe(true);
+  });
+
+  it("parses --ratchet flag", () => {
+    const { options } = parseArgs([".", "--ratchet"]);
+    expect(options.ratchet).toBe(true);
+  });
 });
 
 describe("severity helpers", () => {

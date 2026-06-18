@@ -1,6 +1,6 @@
 # Comparison with Other Tools
 
-CVE Lite CLI is a free, open source vulnerability scanner purpose-built for JavaScript and TypeScript developers. It is an [OWASP Incubator Project](https://owasp.org/cve-lite-cli/) — OWASP (Open Web Application Security Project) is the globally recognized nonprofit behind the security standards followed by millions of developers worldwide, including the OWASP Top 10, the most widely cited web security reference in the industry. Being an OWASP Incubator Project means CVE Lite CLI has been peer-reviewed and accepted by the security community as a vendor-neutral, community-serving tool.
+CVE Lite CLI is a free, open source vulnerability scanner purpose-built for JavaScript and TypeScript developers. It is an [OWASP Lab Project](https://owasp.org/cve-lite-cli/) — OWASP (Open Web Application Security Project) is the globally recognized nonprofit behind the security standards followed by millions of developers worldwide, including the OWASP Top 10, the most widely cited web security reference in the industry. Being an OWASP Lab Project means CVE Lite CLI has been peer-reviewed and accepted by the security community as a vendor-neutral, community-serving tool.
 
 No other free tool combines all of the following: lockfile-based CVE scanning across npm, pnpm, Yarn, and Bun; parent-aware transitive remediation that tells you which package to upgrade (not just which one is vulnerable); fix version validation before suggesting an upgrade; and a fully offline advisory DB workflow for restricted environments.
 
@@ -93,7 +93,7 @@ No GitHub account. No repository hosting. Any CI provider. Restricted networks. 
 Dependabot can generate dozens of open pull requests that accumulate in your repository — each with a potential breaking change, each needing review. CVE Lite gives you the information once, scoped to what you need to fix, when you choose to look.
 
 **Community-recognized and vendor-neutral.**
-CVE Lite CLI is an OWASP Incubator Project — independently recognized by the security community as a vendor-neutral tool, not a commercial product with a vendor's interests behind it. It is MIT licensed, fully open source, and maintained in public.
+CVE Lite CLI is an OWASP Lab Project — independently recognized by the security community as a vendor-neutral tool, not a commercial product with a vendor's interests behind it. It is MIT licensed, fully open source, and maintained in public.
 
 ### Where Dependabot has the edge
 
@@ -282,8 +282,8 @@ When a transitive dependency is vulnerable, CVE Lite identifies the parent packa
 **Fix validation built in.**
 Before CVE Lite suggests `npm install pkg@X.Y.Z`, it checks that version against OSV. Snyk's fix suggestions come from its own database and are generally reliable, but the validation model is opaque — you cannot independently verify the suggested target through a public source the way you can with OSV.
 
-**Fully free and open source — OWASP Incubator Project.**
-CVE Lite is MIT licensed with no usage limits, no seat counts, and no commercial tier. It is an OWASP Incubator Project, recognized by the security community as a vendor-neutral, community-facing tool. Snyk's free tier limits the number of projects you can monitor, and many enterprise features require a paid plan.
+**Fully free and open source — OWASP Lab Project.**
+CVE Lite is MIT licensed with no usage limits, no seat counts, and no commercial tier. It is an OWASP Lab Project, recognized by the security community as a vendor-neutral, community-facing tool. Snyk's free tier limits the number of projects you can monitor, and many enterprise features require a paid plan.
 
 ### Where Snyk has the edge
 
@@ -304,13 +304,106 @@ Use CVE Lite CLI for fast, account-free developer-time scanning and as a lightwe
 
 Socket is a supply-chain security platform that goes beyond CVEs — detecting malware, abandoned packages, typosquatting, and install-time script risks before a CVE is published. CVE Lite CLI is narrowly focused on known dependency vulnerabilities with validated fix commands.
 
-CVE Lite CLI stands out when you want:
+CVE Lite CLI focuses on known vulnerabilities and remediation. Its goal is
+to identify vulnerable dependency versions and provide a clear, validated path to a safe upgrade with copy-and-run fix commands.
 
-- a focused CVE scanner without supply-chain signal noise mixed into the output
-- a clear answer to "what should I fix before this release?" — validated fix commands grouped by severity
-- parent-aware transitive remediation with specific package-manager commands
-- no account, no cloud dependency, and a fully offline advisory DB option
-- a free, MIT-licensed, OWASP-recognized tool with no paid tiers
+Socket focuses on software supply-chain security. In addition to known
+vulnerabilities, it evaluates package trust signals such as malware,
+typosquatting, suspicious maintainers, install scripts, and license risk.
+
+Because they answer different questions, the tools are often complementary
+rather than direct competitors.
+
+Some Socket capabilities require a paid account for full access, whereas CVE Lite CLI is fully available without registration or usage limits.
+
+### Different threat models
+
+The biggest difference between the tools is the type of risk they are
+designed to detect.
+
+CVE Lite CLI answers:
+
+- Is this dependency version vulnerable?
+- What version should I upgrade to?
+- What command should I run?
+
+Socket answers:
+
+- Can this package be trusted?
+- Does it exhibit suspicious behavior?
+- Does it resemble a known package name?
+- Are there maintainer, malware, or license concerns?
+
+A package may have no known CVEs and still be considered risky by Socket.
+Likewise, a package may be trustworthy but contain a publicly disclosed
+vulnerability that CVE Lite identifies and helps remediate.
+
+### Feature comparison
+
+| Capability | CVE Lite CLI | Socket CLI |
+|---|:---:|:---:|
+| Known CVE detection | ✅ | ✅ |
+| Validated fix commands | ✅ | ❌ |
+| Parent-aware transitive remediation | ✅ | ❌ |
+| Offline advisory DB workflow | ✅ | ❌ |
+| No account required | ✅ | ❌ |
+| Local-first workflow | ✅ | ❌ |
+| Malware detection | ❌ | ✅ |
+| Typosquatting detection | ❌ | ✅ |
+| Suspicious maintainer analysis | ❌ | ✅ |
+| License risk detection | ❌ | ✅ |
+| Supply-chain trust analysis | ❌ | ✅ |
+
+<sub>✅ = built-in strength · ⚠️ = partial or workflow-dependent · ❌ = not a core strength</sub>
+
+### Where CVE Lite CLI goes further
+
+- Runs locally without sending dependency data to a cloud platform
+- Validated copy-and-run remediation commands
+- Parent-aware transitive dependency guidance
+- Offline advisory database support
+- Fast terminal-first developer workflow
+- Free, account-free, and independently recognized as an OWASP Lab Project
+
+### Where Socket has the edge
+
+- Malware and suspicious package detection
+- Typosquatting analysis
+- Supply-chain trust signals
+- Maintainer risk evaluation
+- License risk visibility
+- Broader package trust assessment beyond known CVEs
+
+### Why results differ
+
+Socket and CVE Lite evaluate different kinds of risk.
+
+A package can be flagged by Socket because of suspicious behavior,
+maintainer activity, typosquatting indicators, or license concerns even
+when no published CVE exists.
+
+Likewise, CVE Lite may identify a known vulnerability in a package that
+otherwise appears trustworthy from a supply-chain perspective.
+
+As a result, it is normal for the two tools to report different findings
+on the same dependency tree.
+
+### Recommended approach
+
+The strongest dependency security workflow combines both perspectives.
+
+Use Socket to evaluate whether a package should be trusted before it enters
+your dependency graph. Use CVE Lite CLI to identify known vulnerabilities,
+prioritize fixes, and generate remediation commands once dependencies are
+installed.
+
+In practice the tools answer different questions:
+
+- Socket: "Can I trust this package?"
+- CVE Lite CLI: "Is this version vulnerable and how do I fix it?"
+
+As an OWASP Lab Project, CVE Lite CLI provides a free, account-free,
+vendor-neutral approach to vulnerability remediation.
 
 ---
 

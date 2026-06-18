@@ -157,6 +157,11 @@ export function writeCycloneDxReport(
   const filename = `cve-lite-scan-${ts}.cdx.json`;
   const outputPath = path.join(process.cwd(), filename);
   const bom = buildCycloneDxBom(allPackages, findings, projectMeta, getCliVersion(), plan);
-  fs.writeFileSync(outputPath, JSON.stringify(bom, null, 2));
+  try {
+    fs.writeFileSync(outputPath, JSON.stringify(bom, null, 2));
+  } catch (err) {
+    try { fs.rmSync(outputPath, { force: true }); } catch { /* best-effort cleanup */ }
+    throw new Error(`Failed to write CycloneDX report to ${outputPath}: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+  }
   return filename;
 }

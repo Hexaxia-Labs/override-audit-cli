@@ -2,7 +2,7 @@ import { jest } from "@jest/globals";
 import type { Finding, PackageRef } from "../src/types.js";
 import { clearPackumentCache } from "../src/remediation/npm-registry.js";
 import { createNpmTransitiveGraph, findSafeVersionWithinParentRange } from "../src/remediation/npm-transitive-graph.js";
-import { resolveNpmTransitiveRemediation } from "../src/remediation/npm-transitive-resolution.js";
+import { resolveNpmTransitiveRemediation, resolveTransitiveRemediationViaRegistry } from "../src/remediation/npm-transitive-resolution.js";
 
 const fetchMock = jest.fn();
 global.fetch = fetchMock as unknown as typeof fetch;
@@ -59,10 +59,18 @@ function mockPackument(data: unknown, ok = true) {
   });
 }
 
+function packageNameFromRegistryUrl(url: string): string {
+  const prefix = "https://registry.npmjs.org/";
+  if (url.startsWith(prefix)) {
+    return decodeURIComponent(url.slice(prefix.length));
+  }
+  return decodeURIComponent(url.slice(url.lastIndexOf("/") + 1));
+}
+
 function mockPackumentsByPackage(packuments: Record<string, unknown>) {
   fetchMock.mockImplementation(async (input: string | URL | Request) => {
     const url = String(input);
-    const packageName = decodeURIComponent(url.slice(url.lastIndexOf("/") + 1));
+    const packageName = packageNameFromRegistryUrl(url);
     const data = packuments[packageName];
 
     return {
@@ -507,6 +515,134 @@ describe("resolveNpmTransitiveRemediation", () => {
   });
 });
 
+describe("resolveNpmTransitiveRemediation — 3-level within-range gap (#522)", () => {
+  // Reproduces: project → aws-amplify → @aws-amplify/core → js-cookie
+  // @aws-amplify/core declares js-cookie: ^3.0.5 which already covers 3.0.7.
+  // The correct fix is npm update js-cookie (within-range lockfile refresh).
+  // Bug: resolveNpmTransitiveRemediation bails out when directParentName !== immediateParentName,
+  // so it returns null and falls back to the wrong best-effort parent upgrade.
+  beforeEach(() => {
+    fetchMock.mockReset();
+    clearPackumentCache();
+  });
+
+  it("returns null for 3-level chains even when the immediate parent range already covers the fix (known bug #522)", async () => {
+    const graph = createNpmTransitiveGraph({
+      nodes: [
+        { id: "node_modules/aws-amplify", name: "aws-amplify", version: "6.16.3" },
+        { id: "node_modules/@aws-amplify/core", name: "@aws-amplify/core", version: "6.16.1" },
+        { id: "node_modules/js-cookie", name: "js-cookie", version: "3.0.6" },
+      ],
+      edges: [
+        {
+          parentNodeId: "node_modules/aws-amplify",
+          childName: "@aws-amplify/core",
+          childNodeId: "node_modules/@aws-amplify/core",
+          range: "6.16.1",
+        },
+        {
+          parentNodeId: "node_modules/@aws-amplify/core",
+          childName: "js-cookie",
+          childNodeId: "node_modules/js-cookie",
+          range: "^3.0.5",
+        },
+      ],
+    });
+
+    mockPackumentsByPackage({
+      "js-cookie": {
+        versions: {
+          "3.0.5": {},
+          "3.0.6": {},
+          "3.0.7": {},
+          "3.0.8": {},
+        },
+      },
+    });
+
+    const result = await resolveNpmTransitiveRemediation({
+      finding: {
+        pkg: { name: "js-cookie", version: "3.0.6", ecosystem: "npm" },
+        vulnerabilities: [{ id: "GHSA-qjx8-664m-686j" }],
+        severity: "high",
+        cveAliases: [],
+        dependencyPaths: [["project", "aws-amplify", "@aws-amplify/core", "js-cookie"]],
+        relationship: "transitive",
+        firstFixedVersion: "3.0.7",
+      },
+      graph,
+      packages: [
+        { name: "aws-amplify", version: "6.16.3", ecosystem: "npm", paths: [["project", "aws-amplify"]] },
+        { name: "@aws-amplify/core", version: "6.16.1", ecosystem: "npm", paths: [["project", "aws-amplify", "@aws-amplify/core"]] },
+      ],
+      directDependencyNames: new Set(["aws-amplify"]),
+    });
+
+    expect(result).toMatchObject({
+      kind: "update-parent-within-range",
+      package: "js-cookie",
+      currentVersion: "3.0.6",
+      targetChildVersion: "3.0.8",
+      viaPath: ["project", "aws-amplify", "@aws-amplify/core", "js-cookie"],
+    });
+    expect(result?.reason).toContain("@aws-amplify/core@6.16.1 already allows js-cookie@3.0.8");
+  });
+});
+
+describe("resolveTransitiveRemediationViaRegistry — deep-chain within-range", () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    clearPackumentCache();
+  });
+
+  it("returns within-range lockfile refresh for deep chains when the immediate parent range already covers the fix", async () => {
+    mockPackumentsByPackage({
+      "js-cookie": {
+        versions: {
+          "3.0.5": {},
+          "3.0.6": {},
+          "3.0.7": {},
+          "3.0.8": {},
+        },
+      },
+      "@aws-amplify/core": {
+        versions: {
+          "6.16.1": {
+            dependencies: {
+              "js-cookie": "^3.0.5",
+            },
+          },
+        },
+      },
+    });
+
+    const result = await resolveTransitiveRemediationViaRegistry({
+      finding: {
+        pkg: { name: "js-cookie", version: "3.0.6", ecosystem: "npm" },
+        vulnerabilities: [{ id: "GHSA-qjx8-664m-686j" }],
+        severity: "high",
+        cveAliases: [],
+        dependencyPaths: [["project", "aws-amplify", "@aws-amplify/core", "js-cookie"]],
+        relationship: "transitive",
+        firstFixedVersion: "3.0.7",
+      },
+      packages: [
+        { name: "aws-amplify", version: "6.16.3", ecosystem: "npm", paths: [["project", "aws-amplify"]] },
+        { name: "@aws-amplify/core", version: "6.16.1", ecosystem: "npm", paths: [["project", "aws-amplify", "@aws-amplify/core"]] },
+      ],
+      directDependencyNames: new Set(["aws-amplify"]),
+    });
+
+    expect(result).toMatchObject({
+      kind: "update-parent-within-range",
+      package: "js-cookie",
+      currentVersion: "3.0.6",
+      targetChildVersion: "3.0.8",
+      viaPath: ["project", "aws-amplify", "@aws-amplify/core", "js-cookie"],
+    });
+  });
+});
+
 describe("resolveRecommendedParentUpgrade", () => {
   beforeEach(() => {
     fetchMock.mockReset();
@@ -746,5 +882,81 @@ describe("resolveRecommendedParentUpgrade", () => {
       resolveRecommendedParentUpgrade(createFinding(), createPackages(), null, { offline: true }),
     ).resolves.toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("selects the correct version of a package installed at multiple versions based on dependency path", async () => {
+    // Regression test: when the same package (e.g. "mid") is installed at two
+    // different versions on different dependency paths, findPackageVersion must
+    // use path-aware iteration rather than a name-keyed Map. A Map only holds
+    // one entry (last write wins), so the version on the other path would be
+    // returned incorrectly or null.
+    //
+    // Graph: project -> app -> mid@2.0.0 -> lodash (vulnerable path)
+    //        project -> app -> other -> mid@3.0.0 (different path, different version)
+    const resolveRecommendedParentUpgrade = await loadResolver();
+
+    mockPackumentsByPackage({
+      app: {
+        versions: {
+          "1.0.0": { dependencies: { mid: "^2.0.0" } },
+          "2.0.0": { dependencies: { mid: "^3.0.0" } },
+        },
+      },
+    });
+
+    // Two versions of "mid" installed at different paths.
+    const packages: PackageRef[] = [
+      {
+        name: "app",
+        version: "1.0.0",
+        ecosystem: "npm",
+        paths: [["project", "app"]],
+      },
+      {
+        name: "mid",
+        version: "2.0.0",  // old version — the one on the vulnerable path
+        ecosystem: "npm",
+        paths: [["project", "app", "mid"]],
+      },
+      {
+        name: "mid",
+        version: "3.0.0",  // new version — different path, must not shadow the above
+        ecosystem: "npm",
+        paths: [["project", "app", "other", "mid"]],
+      },
+      {
+        name: "lodash",
+        version: "4.17.20",
+        ecosystem: "npm",
+        paths: [["project", "app", "mid", "lodash"]],
+      },
+    ];
+
+    const finding = createFinding({
+      dependencyPaths: [["project", "app", "mid", "lodash"]],
+      pkg: {
+        name: "lodash",
+        version: "4.17.20",
+        ecosystem: "npm",
+        paths: [["project", "app", "mid", "lodash"]],
+      },
+    });
+
+    // The resolver should use mid@2.0.0 (the version on the vulnerable path)
+    // when calling findUpgradeForImmediateIntermediate. If it mistakenly used
+    // mid@3.0.0 (from the Map's last-write-wins), the app@2.0.0 entry requires
+    // mid ^3.0.0 which satisfies 3.0.0, so it would not be selected. With the
+    // correct version (2.0.0), app@2.0.0 requires mid ^3.0.0 which no longer
+    // allows mid@2.0.0, triggering the best-effort upgrade recommendation.
+    const result = await resolveRecommendedParentUpgrade(finding, packages, new Set(["app"]));
+
+    expect(result).toMatchObject({
+      package: "app",
+      currentVersion: "1.0.0",
+      targetVersion: "2.0.0",
+      vulnerablePackage: "lodash",
+      confidence: "best-effort",
+    });
+    expect(result?.reason).toContain("no longer allows mid@2.0.0");
   });
 });

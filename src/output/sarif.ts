@@ -163,6 +163,11 @@ export function writeSarifReport(
   const filename = `cve-lite-scan-${ts}.sarif`;
   const outputPath = path.join(process.cwd(), filename);
   const sarif = buildSarifOutput(findings, lockfileUri, getCliVersion(), plan, overrideFindings);
-  fs.writeFileSync(outputPath, JSON.stringify(sarif, null, 2));
+  try {
+    fs.writeFileSync(outputPath, JSON.stringify(sarif, null, 2));
+  } catch (err) {
+    try { fs.rmSync(outputPath, { force: true }); } catch { /* best-effort cleanup */ }
+    throw new Error(`Failed to write SARIF report to ${outputPath}: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+  }
   return filename;
 }

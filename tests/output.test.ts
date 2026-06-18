@@ -13,8 +13,9 @@ import {
   sortFindingsForOutput,
   summarizeNextAction,
   summarizeRisk,
+  formatRelLabel,
 } from "../src/output/formatters.js";
-import { buildSuggestedFixCommandPlan } from "../src/remediation/fix-commands.js";
+import { buildSuggestedFixCommandPlan, findSuggestedCommandForFinding } from "../src/remediation/fix-commands.js";
 import {
   printActionSummary,
   printCompactOutput,
@@ -193,6 +194,35 @@ describe("output formatters", () => {
       id: "OSV-123",
       severity: "critical",
     });
+    expect(serialized).not.toHaveProperty("riskSummary");
+    expect(serialized).not.toHaveProperty("nextAction");
+  });
+
+  it("includes dev:true in serialized finding when pkg.dev is true", () => {
+    const finding = createFinding({
+      pkg: { name: "lodash", version: "4.17.20", ecosystem: "npm", dev: true },
+    });
+    const serialized = serializeFinding(finding);
+
+    expect(serialized.dev).toBe(true);
+  });
+
+  it("includes dev:false in serialized finding when pkg.dev is false", () => {
+    const finding = createFinding({
+      pkg: { name: "lodash", version: "4.17.20", ecosystem: "npm", dev: false },
+    });
+    const serialized = serializeFinding(finding);
+
+    expect(serialized.dev).toBe(false);
+  });
+
+  it("includes dev:false in serialized finding when pkg.dev is undefined", () => {
+    const finding = createFinding({
+      pkg: { name: "lodash", version: "4.17.20", ecosystem: "npm" },
+    });
+    const serialized = serializeFinding(finding);
+
+    expect(serialized.dev).toBe(false);
   });
 
   it("sorts findings by severity and then package name", () => {
@@ -779,6 +809,224 @@ describe("output formatters", () => {
     ]);
   });
 
+  describe("dev dependency fix commands", () => {
+    function createDirectFinding(name: string, version: string, fixedVersion: string, dev: boolean): Finding {
+      return createFinding({
+        pkg: { name, version, ecosystem: "npm", dev, paths: [["project", name]] },
+        relationship: "direct",
+        dependencyPaths: [["project", name]],
+        severity: "high",
+        firstFixedVersion: fixedVersion,
+        validatedFirstFixedVersion: fixedVersion,
+        recommendedParentUpgrade: undefined,
+        recommendedNpmTransitiveRemediation: undefined,
+      });
+    }
+
+    function scanInputWithPackages(source: "package-lock" | "pnpm-lock" | "yarn-lock" | "bun-lock", packages: { name: string; version: string; dev: boolean }[]): ScanInput {
+      return {
+        mode: "resolved-lockfile",
+        source,
+        filePath: source === "package-lock" ? "/tmp/package-lock.json"
+          : source === "pnpm-lock" ? "/tmp/pnpm-lock.yaml"
+          : source === "yarn-lock" ? "/tmp/yarn.lock"
+          : null,
+        packages: packages.map(p => ({ name: p.name, version: p.version, ecosystem: "npm", dev: p.dev })),
+        notes: [],
+        warnings: [],
+        skippedDependencies: [],
+      };
+    }
+
+    it("adds -D to npm install command for a direct dev dependency", () => {
+      const findings = [createDirectFinding("jest", "30.3.0", "30.4.0", true)];
+      const plan = buildSuggestedFixCommandPlan(findings, scanInputWithPackages("package-lock", [{ name: "jest", version: "30.3.0", dev: true }]));
+      expect(plan?.command).toBe("npm install -D jest@30.4.0");
+    });
+
+    it("does not add -D for a direct prod dependency", () => {
+      const findings = [createDirectFinding("lodash", "4.17.20", "4.17.21", false)];
+      const plan = buildSuggestedFixCommandPlan(findings, scanInputWithPackages("package-lock", [{ name: "lodash", version: "4.17.20", dev: false }]));
+      expect(plan?.command).toBe("npm install lodash@4.17.21");
+    });
+
+    it("splits mixed dev and prod targets into two commands", () => {
+      const findings = [
+        createDirectFinding("jest", "30.3.0", "30.4.0", true),
+        createDirectFinding("lodash", "4.17.20", "4.17.21", false),
+      ];
+      const plan = buildSuggestedFixCommandPlan(findings, scanInputWithPackages("package-lock", [
+        { name: "jest", version: "30.3.0", dev: true },
+        { name: "lodash", version: "4.17.20", dev: false },
+      ]));
+      expect(plan?.command).toBe("npm install lodash@4.17.21 && npm install -D jest@30.4.0");
+    });
+
+    it("adds -D for pnpm dev dependency", () => {
+      const findings = [createDirectFinding("jest", "30.3.0", "30.4.0", true)];
+      const plan = buildSuggestedFixCommandPlan(findings, scanInputWithPackages("pnpm-lock", [{ name: "jest", version: "30.3.0", dev: true }]));
+      expect(plan?.command).toBe("pnpm add -D jest@30.4.0");
+    });
+
+    it("adds -D for yarn dev dependency", () => {
+      const findings = [createDirectFinding("jest", "30.3.0", "30.4.0", true)];
+      const plan = buildSuggestedFixCommandPlan(findings, scanInputWithPackages("yarn-lock", [{ name: "jest", version: "30.3.0", dev: true }]));
+      expect(plan?.command).toBe("yarn add -D jest@30.4.0");
+    });
+
+    it("adds --dev for bun dev dependency", () => {
+      const findings = [createDirectFinding("jest", "30.3.0", "30.4.0", true)];
+      const plan = buildSuggestedFixCommandPlan(findings, scanInputWithPackages("bun-lock", [{ name: "jest", version: "30.3.0", dev: true }]));
+      expect(plan?.command).toBe("bun add --dev jest@30.4.0");
+    });
+
+    it("splits mixed dev and prod targets into two commands for pnpm", () => {
+      const findings = [
+        createDirectFinding("jest", "30.3.0", "30.4.0", true),
+        createDirectFinding("lodash", "4.17.20", "4.17.21", false),
+      ];
+      const plan = buildSuggestedFixCommandPlan(findings, scanInputWithPackages("pnpm-lock", [
+        { name: "jest", version: "30.3.0", dev: true },
+        { name: "lodash", version: "4.17.20", dev: false },
+      ]));
+      expect(plan?.command).toBe("pnpm add lodash@4.17.21 && pnpm add -D jest@30.4.0");
+    });
+
+    it("splits mixed dev and prod targets into two commands for yarn", () => {
+      const findings = [
+        createDirectFinding("jest", "30.3.0", "30.4.0", true),
+        createDirectFinding("lodash", "4.17.20", "4.17.21", false),
+      ];
+      const plan = buildSuggestedFixCommandPlan(findings, scanInputWithPackages("yarn-lock", [
+        { name: "jest", version: "30.3.0", dev: true },
+        { name: "lodash", version: "4.17.20", dev: false },
+      ]));
+      expect(plan?.command).toBe("yarn add lodash@4.17.21 && yarn add -D jest@30.4.0");
+    });
+
+    it("splits mixed dev and prod targets into two commands for bun", () => {
+      const findings = [
+        createDirectFinding("jest", "30.3.0", "30.4.0", true),
+        createDirectFinding("lodash", "4.17.20", "4.17.21", false),
+      ];
+      const plan = buildSuggestedFixCommandPlan(findings, scanInputWithPackages("bun-lock", [
+        { name: "jest", version: "30.3.0", dev: true },
+        { name: "lodash", version: "4.17.20", dev: false },
+      ]));
+      expect(plan?.command).toBe("bun add lodash@4.17.21 && bun add --dev jest@30.4.0");
+    });
+
+    it("adds -D for parent upgrade targeting a dev dependency for pnpm", () => {
+      const findings = [
+        createFinding({
+          pkg: { name: "js-yaml", version: "3.14.2", ecosystem: "npm", dev: true, paths: [["project", "jest", "js-yaml"]] },
+          relationship: "transitive",
+          dependencyPaths: [["project", "jest", "js-yaml"]],
+          severity: "medium",
+          firstFixedVersion: "4.0.0",
+          recommendedParentUpgrade: {
+            package: "jest",
+            currentVersion: "30.3.0",
+            targetVersion: "30.4.0",
+            viaPath: ["project", "jest", "js-yaml"],
+            vulnerablePackage: "js-yaml",
+            confidence: "exact-direct-child",
+            reason: "jest@30.4.0 no longer pulls vulnerable js-yaml",
+          },
+          recommendedNpmTransitiveRemediation: undefined,
+        }),
+      ];
+      const plan = buildSuggestedFixCommandPlan(findings, scanInputWithPackages("pnpm-lock", [{ name: "jest", version: "30.3.0", dev: true }]));
+      expect(plan?.command).toBe("pnpm add -D jest@30.4.0");
+    });
+
+    it("adds -D for parent upgrade targeting a dev dependency for yarn", () => {
+      const findings = [
+        createFinding({
+          pkg: { name: "js-yaml", version: "3.14.2", ecosystem: "npm", dev: true, paths: [["project", "jest", "js-yaml"]] },
+          relationship: "transitive",
+          dependencyPaths: [["project", "jest", "js-yaml"]],
+          severity: "medium",
+          firstFixedVersion: "4.0.0",
+          recommendedParentUpgrade: {
+            package: "jest",
+            currentVersion: "30.3.0",
+            targetVersion: "30.4.0",
+            viaPath: ["project", "jest", "js-yaml"],
+            vulnerablePackage: "js-yaml",
+            confidence: "exact-direct-child",
+            reason: "jest@30.4.0 no longer pulls vulnerable js-yaml",
+          },
+          recommendedNpmTransitiveRemediation: undefined,
+        }),
+      ];
+      const plan = buildSuggestedFixCommandPlan(findings, scanInputWithPackages("yarn-lock", [{ name: "jest", version: "30.3.0", dev: true }]));
+      expect(plan?.command).toBe("yarn add -D jest@30.4.0");
+    });
+
+    it("adds --dev for parent upgrade targeting a dev dependency for bun", () => {
+      const findings = [
+        createFinding({
+          pkg: { name: "js-yaml", version: "3.14.2", ecosystem: "npm", dev: true, paths: [["project", "jest", "js-yaml"]] },
+          relationship: "transitive",
+          dependencyPaths: [["project", "jest", "js-yaml"]],
+          severity: "medium",
+          firstFixedVersion: "4.0.0",
+          recommendedParentUpgrade: {
+            package: "jest",
+            currentVersion: "30.3.0",
+            targetVersion: "30.4.0",
+            viaPath: ["project", "jest", "js-yaml"],
+            vulnerablePackage: "js-yaml",
+            confidence: "exact-direct-child",
+            reason: "jest@30.4.0 no longer pulls vulnerable js-yaml",
+          },
+          recommendedNpmTransitiveRemediation: undefined,
+        }),
+      ];
+      const plan = buildSuggestedFixCommandPlan(findings, scanInputWithPackages("bun-lock", [{ name: "jest", version: "30.3.0", dev: true }]));
+      expect(plan?.command).toBe("bun add --dev jest@30.4.0");
+    });
+
+    it("adds -D for parent upgrade targeting a dev dependency", () => {
+      const findings = [
+        createFinding({
+          pkg: { name: "js-yaml", version: "3.14.2", ecosystem: "npm", dev: true, paths: [["project", "jest", "js-yaml"]] },
+          relationship: "transitive",
+          dependencyPaths: [["project", "jest", "js-yaml"]],
+          severity: "medium",
+          firstFixedVersion: "4.0.0",
+          recommendedParentUpgrade: {
+            package: "jest",
+            currentVersion: "30.3.0",
+            targetVersion: "30.4.0",
+            viaPath: ["project", "jest", "js-yaml"],
+            vulnerablePackage: "js-yaml",
+            confidence: "exact-direct-child",
+            reason: "jest@30.4.0 no longer pulls vulnerable js-yaml",
+          },
+          recommendedNpmTransitiveRemediation: undefined,
+        }),
+      ];
+      const plan = buildSuggestedFixCommandPlan(findings, scanInputWithPackages("package-lock", [{ name: "jest", version: "30.3.0", dev: true }]));
+      expect(plan?.command).toBe("npm install -D jest@30.4.0");
+    });
+
+    it("findSuggestedCommandForFinding returns -D command for dev dependency target", () => {
+      const findings = [createDirectFinding("jest", "30.3.0", "30.4.0", true)];
+      const plan = buildSuggestedFixCommandPlan(findings, scanInputWithPackages("package-lock", [{ name: "jest", version: "30.3.0", dev: true }]));
+      const command = findSuggestedCommandForFinding(plan!, findings[0]!);
+      expect(command).toBe("npm install -D jest@30.4.0");
+    });
+
+    it("findSuggestedCommandForFinding returns command without -D for prod dependency target", () => {
+      const findings = [createDirectFinding("lodash", "4.17.20", "4.17.21", false)];
+      const plan = buildSuggestedFixCommandPlan(findings, scanInputWithPackages("package-lock", [{ name: "lodash", version: "4.17.20", dev: false }]));
+      const command = findSuggestedCommandForFinding(plan!, findings[0]!);
+      expect(command).toBe("npm install lodash@4.17.21");
+    });
+  });
+
   describe("malicious advisory messages", () => {
     function createMaliciousFinding(overrides?: Partial<Finding>): Finding {
       return createFinding({
@@ -844,6 +1092,16 @@ describe("output formatters", () => {
         }],
       });
       expect(getRecommendedAction(finding)).toContain("Consider replacing");
+    });
+
+    it("getRecommendedAction returns unverifiable message for private registry MAL- finding", () => {
+      const finding = createMaliciousFinding({
+        pkg: { name: "evil-pkg", version: "1.0.0", ecosystem: "npm", resolvedUrl: "https://private.registry.com/evil-pkg-1.0.0.tgz" },
+        maliciousUnverifiable: true,
+      });
+      const action = getRecommendedAction(finding);
+      expect(action).toContain("private registry");
+      expect(action).toContain("unverifiable");
     });
   });
 
@@ -1486,7 +1744,29 @@ describe("output printers", () => {
     expect(output).toContain("UNKNOWN");
     expect(output).toContain("⚠ Malicious: Remove this package from your dependencies immediately.");
     expect(output).toContain("⚠ Malicious package advisory:");
-    expect(output).toContain("fs@0.0.1-security — Remove it from your dependencies immediately.");
+    expect(output).toContain("fs@0.0.1-security - Remove it from your dependencies immediately.");
+  });
+
+  it("shows unverifiable inline hint and legend in compact output for private registry MAL- finding", () => {
+    const finding = createFinding({
+      pkg: { name: "node-ipc", version: "9.2.3", ecosystem: "npm", paths: [["project", "node-ipc"]], resolvedUrl: "https://npm.internal.example.com/node-ipc/-/node-ipc-9.2.3.tgz" },
+      severity: "unknown",
+      relationship: "direct",
+      dependencyPaths: [["project", "node-ipc"]],
+      firstFixedVersion: null,
+      recommendedParentUpgrade: undefined,
+      recommendedNpmTransitiveRemediation: undefined,
+      vulnerabilities: [{ id: "MAL-2026-3744", aliases: [], summary: "Malicious code in node-ipc", severity: [] }],
+      maliciousUnverifiable: true,
+    });
+    const lines = captureLogs(() => {
+      printCompactOutput([finding], createScanInputForSource("package-lock"));
+    });
+    const output = lines.join("\n");
+    expect(output).toContain("⚠ Unverifiable (private source) - MAL- advisory could not be confirmed for this artifact.");
+    expect(output).toContain("node-ipc@9.2.3 - Unverifiable (private source) - verify artifact source manually");
+    expect(output).not.toContain("⚠ Malicious: Remove");
+    expect(output).not.toContain("Remove it from your dependencies immediately.");
   });
 
   it("does not show malicious legend in compact output when --all is set (printTable shows it instead)", () => {
@@ -1882,5 +2162,106 @@ describe("createSpinner", () => {
       spinner.fail("Error");
     });
     expect(logs).toHaveLength(0);
+  });
+});
+
+import { isGitSource, hasCommitShaPinning } from "../src/utils/advisory.js";
+
+describe("isGitSource", () => {
+  it("returns true for GitHub codeload URL", () => {
+    const pkg = { name: "pkg", version: "1.0.0", ecosystem: "npm", resolvedUrl: "https://codeload.github.com/org/repo/tar.gz/abc123" };
+    expect(isGitSource(pkg)).toBe(true);
+  });
+
+  it("returns true for github.com URL", () => {
+    const pkg = { name: "pkg", version: "1.0.0", ecosystem: "npm", resolvedUrl: "https://github.com/org/repo/archive/abc123.tar.gz" };
+    expect(isGitSource(pkg)).toBe(true);
+  });
+
+  it("returns true for gitlab.com URL", () => {
+    const pkg = { name: "pkg", version: "1.0.0", ecosystem: "npm", resolvedUrl: "https://gitlab.com/org/repo/-/archive/abc123/repo.tar.gz" };
+    expect(isGitSource(pkg)).toBe(true);
+  });
+
+  it("returns true for git+https protocol", () => {
+    const pkg = { name: "pkg", version: "1.0.0", ecosystem: "npm", resolvedUrl: "git+https://github.com/org/repo.git" };
+    expect(isGitSource(pkg)).toBe(true);
+  });
+
+  it("returns false for npm registry URL", () => {
+    const pkg = { name: "pkg", version: "1.0.0", ecosystem: "npm", resolvedUrl: "https://registry.npmjs.org/pkg/-/pkg-1.0.0.tgz" };
+    expect(isGitSource(pkg)).toBe(false);
+  });
+
+  it("returns false for private npm registry URL", () => {
+    const pkg = { name: "pkg", version: "1.0.0", ecosystem: "npm", resolvedUrl: "https://npm.internal.example.com/pkg/-/pkg-1.0.0.tgz" };
+    expect(isGitSource(pkg)).toBe(false);
+  });
+
+  it("returns false when resolvedUrl is undefined", () => {
+    const pkg = { name: "pkg", version: "1.0.0", ecosystem: "npm" };
+    expect(isGitSource(pkg)).toBe(false);
+  });
+});
+
+describe("hasCommitShaPinning", () => {
+  it("returns true when URL contains a 40-char hex SHA", () => {
+    const pkg = { name: "pkg", version: "1.0.0", ecosystem: "npm", resolvedUrl: "https://codeload.github.com/org/repo/tar.gz/9af9b3c49515b85598cd88de3e8cc20c7a98efbb" };
+    expect(hasCommitShaPinning(pkg)).toBe(true);
+  });
+
+  it("returns false when URL has no SHA (short ref or tag)", () => {
+    const pkg = { name: "pkg", version: "1.0.0", ecosystem: "npm", resolvedUrl: "https://github.com/org/repo/archive/main.tar.gz" };
+    expect(hasCommitShaPinning(pkg)).toBe(false);
+  });
+
+  it("returns false when resolvedUrl is undefined", () => {
+    const pkg = { name: "pkg", version: "1.0.0", ecosystem: "npm" };
+    expect(hasCommitShaPinning(pkg)).toBe(false);
+  });
+});
+
+describe("serializeFinding - git source MAL", () => {
+  it("includes maliciousGitSource:true when finding has maliciousGitSource set", () => {
+    const finding = createFinding({
+      pkg: { name: "node-ipc", version: "9.2.3", ecosystem: "npm", resolvedUrl: "https://codeload.github.com/org/repo/tar.gz/9af9b3c49515b85598cd88de3e8cc20c7a98efbb" },
+      vulnerabilities: [{ id: "MAL-2022-1000", summary: "Malicious package", aliases: [], severity: [] }],
+    });
+    finding.maliciousGitSource = true;
+    finding.maliciousGitSourcePinned = true;
+    const result = serializeFinding(finding);
+    expect(result.maliciousGitSource).toBe(true);
+    expect(result.maliciousGitSourcePinned).toBe(true);
+  });
+
+  it("includes maliciousGitSource:false when not set", () => {
+    const finding = createFinding({
+      pkg: { name: "node-ipc", version: "9.2.3", ecosystem: "npm" },
+    });
+    const result = serializeFinding(finding);
+    expect(result.maliciousGitSource).toBe(false);
+    expect(result.maliciousGitSourcePinned).toBe(false);
+  });
+});
+
+describe("formatRelLabel", () => {
+  it("returns 'direct' for a prod direct finding", () => {
+    const finding = { relationship: "direct", pkg: { name: "axios", version: "0.21.1", ecosystem: "npm", dev: false } };
+    expect(formatRelLabel(finding)).toBe("direct");
+  });
+
+  it("returns 'direct · dev' for a dev direct finding", () => {
+    const finding = { relationship: "direct", pkg: { name: "jest", version: "29.0.0", ecosystem: "npm", dev: true } };
+    expect(formatRelLabel(finding)).toBe("direct · dev");
+  });
+
+  it("returns 'transitive · dev' for a dev transitive finding", () => {
+    const finding = { relationship: "transitive", pkg: { name: "jest-runner", version: "29.0.0", ecosystem: "npm", dev: true } };
+    expect(formatRelLabel(finding)).toBe("transitive · dev");
+  });
+
+  it("returns 'transitive' when dev is undefined", () => {
+    const finding = { relationship: "transitive", pkg: { name: "axios", version: "0.21.1", ecosystem: "npm" } };
+    expect(formatRelLabel(finding)).toBe("transitive");
   });
 });

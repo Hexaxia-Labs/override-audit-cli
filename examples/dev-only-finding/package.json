@@ -1,0 +1,10 @@
+{
+  "name": "cve-lite-example-dev-only-finding",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Vulnerable package that only appears in devDependencies — scanner should classify it correctly and exclude it from --prod-only scans.",
+  "license": "MIT",
+  "devDependencies": {
+    "axios": "0.21.1"
+  }
+}

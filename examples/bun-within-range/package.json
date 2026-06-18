@@ -1,0 +1,10 @@
+{
+  "name": "cve-lite-example-bun-within-range",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bun lockfile fixture: transitive follow-redirects@1.14.0 via axios@0.21.1 where axios already allows a safe follow-redirects version within range.",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "0.21.1"
+  }
+}

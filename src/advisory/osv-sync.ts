@@ -187,12 +187,8 @@ export async function syncOsvAdvisories(
 
     return { advisoryCount, dbPath, sourceUrl };
   } catch (error) {
-    try {
-      db.close();
-    } finally {
-      if (fs.existsSync(dbPath)) {
-        fs.rmSync(dbPath, { force: true });
-      }
+    if (fs.existsSync(dbPath)) {
+      fs.rmSync(dbPath, { force: true });
     }
     throw error;
   } finally {

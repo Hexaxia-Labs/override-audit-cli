@@ -1,0 +1,15 @@
+{
+  "name": "cve-lite-example-pnpm-within-range",
+  "version": "1.0.0",
+  "private": true,
+  "description": "pnpm regression fixture: transitive qs via body-parser where the parent's range already covers the fix — expect pnpm update qs, not a parent bump.",
+  "license": "MIT",
+  "dependencies": {
+    "body-parser": "1.20.5"
+  },
+  "pnpm": {
+    "overrides": {
+      "qs": "6.15.1"
+    }
+  }
+}

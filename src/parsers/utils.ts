@@ -1,6 +1,21 @@
 import type { PackageRef } from "../types.js";
 import { uniquePathArrays } from "../utils/array.js";
 
+export function markDevPackages(map: Map<string, PackageRef>, devDepNames: Set<string>): void {
+  if (devDepNames.size === 0) return;
+
+  for (const pkg of map.values()) {
+    const paths = pkg.paths ?? [];
+    if (paths.length === 0) continue;
+    // A package is dev only if every known path starts from a devDependency root.
+    // path[1] is the root dep name (path[0] is always "project").
+    const allPathsFromDev = paths.every(p => p.length >= 2 && devDepNames.has(p[1]));
+    if (allPathsFromDev) {
+      pkg.dev = true;
+    }
+  }
+}
+
 export function upsertPackage(map: Map<string, PackageRef>, candidate: PackageRef) {
   const key = `${candidate.name}@${candidate.version}`;
   const existing = map.get(key);

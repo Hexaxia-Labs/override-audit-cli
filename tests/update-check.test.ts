@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { jest } from "@jest/globals";
 import { isNewer, readCache, writeCache, isCacheStale } from "../src/utils/update-check.js";
+import { removeDir } from "./test-utils.js";
 
 describe("isNewer", () => {
   it("returns true when latest has a higher major", () => {
@@ -33,27 +34,39 @@ describe("isNewer", () => {
     expect(isNewer("not-a-version", "1.17.3")).toBe(false);
     expect(isNewer("1.18.0", "not-a-version")).toBe(false);
   });
+
+  it("correctly parses pre-release current version — stable latest is not newer than alpha", () => {
+    expect(isNewer("1.18.2", "1.19.0-alpha.1")).toBe(false);
+  });
+
+  it("correctly parses pre-release latest version", () => {
+    expect(isNewer("1.19.0-alpha.1", "1.18.2")).toBe(true);
+  });
+
+  it("returns false when pre-release and stable are the same core version", () => {
+    expect(isNewer("1.19.0", "1.19.0-alpha.1")).toBe(false);
+  });
 });
 
 describe("readCache", () => {
   it("returns null when cache file does not exist", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cve-test-"));
     expect(readCache(tmpDir)).toBeNull();
-    fs.rmSync(tmpDir, { recursive: true });
+    removeDir(tmpDir);
   });
 
   it("returns null for a corrupt cache file", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cve-test-"));
     fs.writeFileSync(path.join(tmpDir, "update-check.json"), "not-json", "utf8");
     expect(readCache(tmpDir)).toBeNull();
-    fs.rmSync(tmpDir, { recursive: true });
+    removeDir(tmpDir);
   });
 
   it("returns null when required fields are missing", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cve-test-"));
     fs.writeFileSync(path.join(tmpDir, "update-check.json"), JSON.stringify({ foo: "bar" }), "utf8");
     expect(readCache(tmpDir)).toBeNull();
-    fs.rmSync(tmpDir, { recursive: true });
+    removeDir(tmpDir);
   });
 
   it("returns the cache when file is valid", () => {
@@ -61,7 +74,7 @@ describe("readCache", () => {
     const payload = { latestVersion: "1.18.0", checkedAt: new Date().toISOString() };
     fs.writeFileSync(path.join(tmpDir, "update-check.json"), JSON.stringify(payload), "utf8");
     expect(readCache(tmpDir)).toEqual(payload);
-    fs.rmSync(tmpDir, { recursive: true });
+    removeDir(tmpDir);
   });
 });
 
@@ -72,7 +85,7 @@ describe("writeCache", () => {
     const result = readCache(tmpDir);
     expect(result?.latestVersion).toBe("1.18.0");
     expect(typeof result?.checkedAt).toBe("string");
-    fs.rmSync(tmpDir, { recursive: true });
+    removeDir(tmpDir);
   });
 });
 
@@ -107,7 +120,7 @@ describe("checkForUpdate", () => {
 
   afterEach(() => {
     consoleSpy.mockRestore();
-    fs.rmSync(tmpDir, { recursive: true });
+    removeDir(tmpDir);
     if (savedCI !== undefined) process.env["CI"] = savedCI;
     else delete process.env["CI"];
     if (savedNoUpdateNotifier !== undefined) process.env["NO_UPDATE_NOTIFIER"] = savedNoUpdateNotifier;

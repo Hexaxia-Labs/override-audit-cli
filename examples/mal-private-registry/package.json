@@ -1,0 +1,10 @@
+{
+  "name": "cve-lite-example-mal-private-registry",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Demonstrates MAL- advisory handling for packages resolved from a private registry vs. the public npm registry.",
+  "license": "MIT",
+  "dependencies": {
+    "node-ipc": "9.2.3"
+  }
+}

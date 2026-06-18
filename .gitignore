@@ -22,6 +22,8 @@ CLAUDE.md
 .superpowers/
 docs/superpowers/
 cve-report/
+cve-lite-scan-*.json
+examples/.cve-lite-agent-*/
 
 # Hexaxia dev-area exclusions (this repo is a dev mirror of cve-lite-cli)
 cve-lite-ref/

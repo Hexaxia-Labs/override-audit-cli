@@ -33,7 +33,7 @@ cve-lite install-skill
 |---|---|---|---|
 | `--verbose` | off | Full output: severity table, fix plan, findings table, coverage notes | `cve-lite . --verbose` |
 | `--json` | off | Machine-readable JSON output (suppresses all other output) | `cve-lite . --json` |
-| `--sarif` | off | Write SARIF 2.1.0 output to a timestamped `.sarif` file; can be combined with `--json`; cannot be combined with `--report` | `cve-lite . --sarif` |
+| `--sarif` | off | Write SARIF 2.1.0 output to a timestamped `.sarif` file; can be combined with `--json` and `--report` | `cve-lite . --sarif` |
 | `--cdx` | off | Write CycloneDX 1.4 SBOM to a timestamped `.cdx.json` file; can be combined with `--json` and `--sarif`; cannot be combined with `--report` | `cve-lite . --cdx` |
 | `--report[=<path>]` | off / `./cve-report` | Generate an HTML report; optional path sets output directory (default `./cve-report`); opens in browser by default; cannot be used with `--json` | `cve-lite . --report`<br/>`cve-lite . --report ./reports` |
 | `--no-open` | off | Generate the HTML report without opening it in the browser | `cve-lite . --report --no-open` |

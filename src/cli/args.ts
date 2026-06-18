@@ -181,6 +181,26 @@ export function parseArgs(argv: string[]): {
       options.fix = true;
       continue;
     }
+    if (arg === "--ratchet") {
+      options.ratchet = true;
+      continue;
+    }
+    if (arg === "--create-pr") {
+      options.createPr = true;
+      continue;
+    }
+    if (arg === "--base") {
+      const val = argv[++i];
+      if (!val) throw new Error("--base requires a branch name");
+      options.prBase = val;
+      continue;
+    }
+    if (arg.startsWith("--base=")) {
+      const val = arg.slice("--base=".length);
+      if (!val) throw new Error("--base requires a branch name");
+      options.prBase = val;
+      continue;
+    }
     if (arg === "--prod-only") {
       options.prodOnly = true;
       continue;
@@ -326,10 +346,6 @@ export function parseArgs(argv: string[]): {
       continue;
     }
     throw new Error(`Unexpected argument: ${arg}`);
-  }
-
-  if (options.sarif && options.report) {
-    throw new Error("cannot combine --sarif and --report");
   }
 
   if (options.cdx && options.report) {

@@ -1,0 +1,10 @@
+{
+  "name": "cve-lite-example-pnpm-mal-private-registry",
+  "version": "1.0.0",
+  "private": true,
+  "description": "pnpm v9 fixture: node-ipc resolved from a private registry — should show Unverifiable (private source) instead of Malicious.",
+  "license": "ISC",
+  "dependencies": {
+    "node-ipc": "9.2.3"
+  }
+}

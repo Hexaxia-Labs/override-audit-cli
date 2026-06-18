@@ -5,6 +5,7 @@ import { jest } from "@jest/globals";
 import type { OsvVuln, PackageRef, ParsedOptions } from "../src/types.js";
 import { LocalAdvisoryDatabase } from "../src/advisory/local-db.js";
 import { clearPackumentCache } from "../src/remediation/npm-registry.js";
+import { removeDir } from "./test-utils.js";
 
 const queryBatchMock = jest.fn();
 const getVulnMock = jest.fn();
@@ -23,10 +24,6 @@ const { loadCache } = await import("../src/osv/cache.js");
 
 function createTempCacheDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "cve-lite-scanner-test-"));
-}
-
-function removeDir(dirPath: string) {
-  fs.rmSync(dirPath, { recursive: true, force: true });
 }
 
 function createOptions(cacheDir: string): ParsedOptions {
@@ -461,6 +458,68 @@ describe("scanPackages cache behavior", () => {
     }
   });
 
+  it("fetches all uncached CVE detail IDs and populates findings even when some fail", async () => {
+    const cacheDir = createTempCacheDir();
+    const pkg = createPackage("multi-cve-pkg", "1.0.0");
+    const goodDetail: OsvVuln = { id: "OSV-GOOD" };
+
+    queryBatchMock.mockResolvedValue([
+      { package: pkg.name, version: pkg.version, vulnerabilities: [{ id: "OSV-GOOD" }, { id: "OSV-BAD" }] },
+    ]);
+    // OSV-GOOD succeeds, OSV-BAD fails
+    getVulnMock.mockImplementation(async (id: string) => {
+      if (id === "OSV-BAD") throw new Error("network error");
+      return goodDetail;
+    });
+
+    try {
+      const findings = await scanPackages([pkg], 100, createOptions(cacheDir));
+      // OSV-GOOD detail should be present even though OSV-BAD failed
+      expect(findings).toHaveLength(1);
+      expect(findings[0]?.vulnerabilities).toEqual([goodDetail]);
+      expect(getVulnMock).toHaveBeenCalledTimes(2);
+    } finally {
+      removeDir(cacheDir);
+    }
+  });
+
+  it("fetches multiple uncached CVE detail IDs and skips already-cached ones", async () => {
+    const cacheDir = createTempCacheDir();
+    const pkg = createPackage("cached-cve-pkg", "1.0.0");
+    const cachedDetail: OsvVuln = { id: "OSV-CACHED" };
+    const freshDetail: OsvVuln = { id: "OSV-FRESH" };
+    const cacheFile = path.join(cacheDir, "osv-vulns.json");
+
+    // Pre-populate cache with OSV-CACHED
+    fs.writeFileSync(
+      cacheFile,
+      JSON.stringify({
+        version: 3,
+        createdAt: new Date().toISOString(),
+        entries: { "OSV-CACHED": cachedDetail },
+        queryEntries: {},
+      }),
+      "utf8",
+    );
+
+    queryBatchMock.mockResolvedValue([
+      { package: pkg.name, version: pkg.version, vulnerabilities: [{ id: "OSV-CACHED" }, { id: "OSV-FRESH" }] },
+    ]);
+    getVulnMock.mockResolvedValue(freshDetail);
+
+    try {
+      const findings = await scanPackages([pkg], 100, createOptions(cacheDir));
+      expect(findings).toHaveLength(1);
+      // Both details should appear in the finding
+      expect(findings[0]?.vulnerabilities).toEqual(expect.arrayContaining([cachedDetail, freshDetail]));
+      // Only the uncached ID should have been fetched
+      expect(getVulnMock).toHaveBeenCalledTimes(1);
+      expect(getVulnMock).toHaveBeenCalledWith("OSV-FRESH");
+    } finally {
+      removeDir(cacheDir);
+    }
+  });
+
   it("fires all batch requests in parallel rather than sequentially", async () => {
     const cacheDir = createTempCacheDir();
     const packages = Array.from({ length: 3 }, (_, i) =>
@@ -588,6 +647,121 @@ describe("scanPackages cache behavior", () => {
         vulnIds: ["OSV-999"],
         cachedAt: expect.any(String),
       });
+    } finally {
+      removeDir(cacheDir);
+    }
+  });
+
+  it("sets maliciousUnverifiable when MAL- advisory matches a package from a private registry", async () => {
+    const cacheDir = createTempCacheDir();
+    const pkg: PackageRef = {
+      name: "evil-pkg",
+      version: "1.0.0",
+      ecosystem: "npm",
+      paths: [["root", "evil-pkg"]],
+      resolvedUrl: "https://npm.mycompany.internal/evil-pkg/-/evil-pkg-1.0.0.tgz",
+    };
+    const detail: OsvVuln = {
+      id: "MAL-2026-0001",
+      affected: [{ ranges: [{ events: [{ introduced: "0" }] }] }],
+    };
+
+    queryBatchMock.mockResolvedValue([
+      { package: pkg.name, version: pkg.version, vulnerabilities: [{ id: "MAL-2026-0001" }] },
+    ]);
+    getVulnMock.mockResolvedValue(detail);
+    fetchMock.mockResolvedValue({ ok: false, status: 404 });
+
+    try {
+      const findings = await scanPackages([pkg], 100, createOptions(cacheDir));
+      expect(findings).toHaveLength(1);
+      expect(findings[0]?.maliciousUnverifiable).toBe(true);
+    } finally {
+      removeDir(cacheDir);
+    }
+  });
+
+  it("does NOT set maliciousUnverifiable when MAL- advisory matches a package from registry.npmjs.org", async () => {
+    const cacheDir = createTempCacheDir();
+    const pkg: PackageRef = {
+      name: "lodash",
+      version: "4.17.20",
+      ecosystem: "npm",
+      paths: [["root", "lodash"]],
+      resolvedUrl: "https://registry.npmjs.org/lodash/-/lodash-4.17.20.tgz",
+    };
+    const detail: OsvVuln = {
+      id: "MAL-2026-0002",
+      affected: [{ ranges: [{ events: [{ introduced: "0" }] }] }],
+    };
+
+    queryBatchMock.mockResolvedValue([
+      { package: pkg.name, version: pkg.version, vulnerabilities: [{ id: "MAL-2026-0002" }] },
+    ]);
+    getVulnMock.mockResolvedValue(detail);
+    fetchMock.mockResolvedValue({ ok: false, status: 404 });
+
+    try {
+      const findings = await scanPackages([pkg], 100, createOptions(cacheDir));
+      expect(findings).toHaveLength(1);
+      expect(findings[0]?.maliciousUnverifiable).toBeUndefined();
+    } finally {
+      removeDir(cacheDir);
+    }
+  });
+
+  it("does NOT set maliciousUnverifiable when MAL- advisory matches a package with no resolvedUrl", async () => {
+    const cacheDir = createTempCacheDir();
+    const pkg: PackageRef = {
+      name: "some-pkg",
+      version: "2.0.0",
+      ecosystem: "npm",
+      paths: [["root", "some-pkg"]],
+    };
+    const detail: OsvVuln = {
+      id: "MAL-2026-0003",
+      affected: [{ ranges: [{ events: [{ introduced: "0" }] }] }],
+    };
+
+    queryBatchMock.mockResolvedValue([
+      { package: pkg.name, version: pkg.version, vulnerabilities: [{ id: "MAL-2026-0003" }] },
+    ]);
+    getVulnMock.mockResolvedValue(detail);
+    fetchMock.mockResolvedValue({ ok: false, status: 404 });
+
+    try {
+      const findings = await scanPackages([pkg], 100, createOptions(cacheDir));
+      expect(findings).toHaveLength(1);
+      expect(findings[0]?.maliciousUnverifiable).toBeUndefined();
+    } finally {
+      removeDir(cacheDir);
+    }
+  });
+
+  it("does NOT set maliciousUnverifiable for a non-MAL CVE from a private registry", async () => {
+    const cacheDir = createTempCacheDir();
+    const pkg: PackageRef = {
+      name: "vulnerable-pkg",
+      version: "1.0.0",
+      ecosystem: "npm",
+      paths: [["root", "vulnerable-pkg"]],
+      resolvedUrl: "https://npm.mycompany.internal/vulnerable-pkg/-/vulnerable-pkg-1.0.0.tgz",
+    };
+    const detail: OsvVuln = {
+      id: "CVE-2026-9999",
+      affected: [{ ranges: [{ events: [{ introduced: "0" }] }] }],
+    };
+
+    queryBatchMock.mockResolvedValue([
+      { package: pkg.name, version: pkg.version, vulnerabilities: [{ id: "CVE-2026-9999" }] },
+    ]);
+    getVulnMock.mockResolvedValue(detail);
+    fetchMock.mockResolvedValue({ ok: false, status: 404 });
+
+    try {
+      const findings = await scanPackages([pkg], 100, createOptions(cacheDir));
+      expect(findings).toHaveLength(1);
+      expect(findings[0]?.maliciousUnverifiable).toBeUndefined();
     } finally {
       removeDir(cacheDir);
     }

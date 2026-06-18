@@ -62,7 +62,7 @@ This separation enables a "fix the root" strategy. Instead of chasing every nest
 
 CVE Lite CLI turns findings into package-manager-native commands when the available metadata supports a confident path. Direct findings use validated package upgrades. Transitive findings prefer the parent package that introduced the vulnerable dependency, including npm-specific `npm update <parent>` recommendations when a known non-vulnerable child version already fits within the current parent range.
 
-See the [Remediation Strategy guide](remediation-strategy.md) for the full decision model and package-manager notes.
+See the [Remediation Strategy guide](remediation-strategy) for the full decision model and package-manager notes.
 
 ---
 

@@ -26,12 +26,6 @@ export function printHelp(): void {
   printBanner();
 
   const lines = [
-    "cve-lite",
-    "",
-    "Fast local-first CVE scanner for JS/TS projects using lockfiles + OSV",
-    "",
-    `Version: ${CLI_VERSION}`,
-    "",
     "Usage:",
     "  cve-lite [projectPath] [options]",
     "  cve-lite advisories sync [options]",
@@ -46,6 +40,9 @@ export function printHelp(): void {
     "  --cdx                     Write CycloneDX 1.4 SBOM to a timestamped .cdx.json file",
     "  --no-open                 Don't auto-open the report in the browser",
     "  --fix                     Apply validated direct dependency fixes and rescan",
+    "  --ratchet                 Save current findings as baseline or, if baseline exists, only fail on new findings",
+    "  --create-pr               After --fix, commit changes and open a GitHub pull request (requires gh)",
+    "  --base <branch>           Base branch for --create-pr (default: main)",
     "  --osv-url <url>           Use a custom OSV-compatible advisory endpoint",
     "  --ca-cert <path>          Path to a CA certificate file for corporate SSL proxies",
     "  --debug                   Write verbose runtime/network diagnostics to a timestamped log file",
@@ -75,7 +72,17 @@ export function printHelp(): void {
     "  config show                Show current configuration",
     "",
     "  -v, --version             Show the CLI version",
-    "  -h, --help                Show this help message"
+    "  -h, --help                Show this help message",
+    "",
+    "Examples:",
+    "  cve-lite .                        Scan the current directory",
+    "  cve-lite . --verbose              Full output with fix plan and findings table",
+    "  cve-lite . --fail-on high         Exit 1 if any high or critical findings are found",
+    "  cve-lite . --json                 Write findings to a timestamped JSON file",
+    "  cve-lite . --report               Generate an interactive HTML report",
+    "  cve-lite . --fix                  Apply validated direct dependency fixes and rescan",
+    "  cve-lite . --offline              Scan using the local advisory database (no network)",
+    "  cve-lite advisories sync          Sync the local advisory database"
   ];
   console.log(lines.join("\n"));
 }
