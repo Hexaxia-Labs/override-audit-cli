@@ -106,6 +106,7 @@ No account. No configuration. No source code leaves your machine.
 - **Offline advisory DB** — sync advisory data ahead of time and scan with zero runtime API calls, designed for enterprise and air-gapped environments
 - **Interactive HTML report** — generate a self-contained dashboard with severity cards, a searchable findings table, and copy-ready fix commands (`--report`)
 - **Auto-fix mode** — apply validated direct dependency fixes and rescan automatically (`--fix`)
+- **Override hygiene checks** — audit npm/pnpm/yarn/bun `overrides` and `resolutions` for orphaned targets, floating tags, surpassed pins, ineffective nested overrides, and platform-binary coupling (`cve-lite overrides`, rules `OA001`-`OA008`)
 - **CI-ready** — `--fail-on high` exits non-zero on findings at or above a severity threshold; a first-party [GitHub Action](https://github.com/marketplace/actions/cve-lite-cli) is available on the Marketplace; `--sarif` writes SARIF 2.1.0 output for direct upload to GitHub Code Scanning; `--cdx` writes a CycloneDX 1.4 SBOM for Dependency-Track and compliance artifacts; `--json` integrates with SIEM tools and dashboards
 - **Minimal footprint** — four runtime dependencies, intentionally kept small for a security tool
 
@@ -293,6 +294,12 @@ cve-lite /path/to/project --verbose
 # Apply validated direct dependency fixes and rescan
 cve-lite /path/to/project --fix
 
+# Audit override hygiene (OA001-OA008) across npm/pnpm/yarn/bun
+cve-lite overrides /path/to/project
+
+# Audit and auto-clean stale or ineffective overrides
+cve-lite overrides /path/to/project --fix
+
 # Production dependencies only (where supported by the lockfile)
 cve-lite /path/to/project --prod-only
 
@@ -346,15 +353,64 @@ In the current version it:
 - applies only direct dependency fixes with a validated lowest known non-vulnerable target
 - uses `npm install`, `pnpm add`, `yarn add`, or `bun add` based on your lockfile
 - rescans automatically after applying fixes
+- runs the override hygiene fix-and-verify hook after the CVE fixes: it applies fixable override findings, then re-audits the just-touched packages (`OA001`/`OA008`) to confirm no vulnerable copy is still nested under a parent dependency
 - does **not** auto-apply transitive overrides or guarantee application compatibility
 
 ```bash
 npx cve-lite-cli /path/to/project --fix
 ```
 
+**Exit codes.** `--fix` adds a dedicated exit code for a verify failure, so CI can tell "nothing to fix" apart from "the fix ran but did not take":
+
+| Code | Meaning |
+|---|---|
+| `0` | no findings at or above `--fail-on` |
+| `1` | findings present (CVE or override) at or above `--fail-on` |
+| `2` | `--fix` applied but the post-fix verify pass detected the fix did not take |
+| `3` | tool error (unreadable lockfile, unhandled exception) |
+
 See the [Fix mode guide](https://owasp.org/cve-lite-cli/docs/fix-mode) for output details and interpretation.
 
 For a deeper explanation of how the CLI chooses direct upgrades, parent upgrades, and npm `update` recommendations for transitive findings, see the [Remediation Strategy guide](https://owasp.org/cve-lite-cli/docs/remediation-strategy).
+
+## Override hygiene (`overrides`)
+
+`overrides` and `resolutions` are powerful, but they rot. A pin you added to dodge a CVE last year can outlive its target, drift behind upstream, or quietly stop taking effect after a refactor, leaving a vulnerable copy still nested under a parent dependency. `cve-lite overrides [path]` audits that hygiene across npm, pnpm, yarn, and bun, reporting eight classes of problem (`OA001`-`OA008`):
+
+| Rule | What it catches |
+|---|---|
+| `OA001` | Orphaned target: override for a package no longer in the tree |
+| `OA002` | Floating tag: override pinned to a moving tag (`latest`, `next`) |
+| `OA003` | Wrong section: override placed in the wrong container |
+| `OA004` | Surpassed pin: the rest of the tree has moved past the pin |
+| `OA005` | Nested ineffective override that never applies |
+| `OA006` | Coupled platform binary: override fights a parent's exact pin |
+| `OA007` | Frozen latest: registry has drifted past the pinned version (needs `--check-network`) |
+| `OA008` | Materialized vulnerable copy still on disk despite the override |
+
+```bash
+# Audit, severity-grouped terminal output
+cve-lite overrides /path/to/project
+
+# Structured JSON findings
+cve-lite overrides /path/to/project --json
+
+# Apply RFC 6902 patches for fixable findings
+cve-lite overrides /path/to/project --fix
+
+# Scope a run (or a fix) to a single rule
+cve-lite overrides /path/to/project --rule OA001
+
+# Enable the OA007 registry drift check (opt-in network)
+cve-lite overrides /path/to/project --check-network
+
+# Stream an NDJSON change-control log of every detection and fix
+cve-lite overrides /path/to/project --audit-log ./override-audit.ndjson
+```
+
+`--fix` applies fixes as RFC 6902 patches to `package.json`. A chokepoint guard means a fix can only remove, repin, move, or relocate an existing override; it can never invent a new override key. Suggest-only findings (OA004 cross-major, OA005.d/.e, all of OA008) and "proposed" fixes (the OA006 relocate floor) carry no auto-applied patch and are surfaced as recommendations. `--fail-on <severity>` sets the minimum severity that makes the command exit non-zero (default: `critical`).
+
+Full per-rule reference, including the OA005 sub-codes, lives in [`docs/rules/`](docs/rules/README.md). For the programmatic API, see [`docs/api/overrides.md`](docs/api/overrides.md).
 
 ## AI assistant integration (`install-skill`)
 

@@ -4,6 +4,20 @@ All notable changes to CVE Lite CLI will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `cve-lite overrides [path]` subcommand audits override hygiene across npm, pnpm, yarn, and bun projects. Covers the eight `OA001`-`OA008` rules: orphaned target, floating tag, wrong section, surpassed pin, nested ineffective override, coupled platform binary, frozen latest (registry drift), and materialized vulnerable copy. Supports `--fix`, `--rule <id>`, `--json`, `--fail-on <severity>`, `--audit-log <path>`, and `--check-network` (opt-in OA007 registry calls).
+- `--fix` applies the override-hygiene fixes as RFC 6902 patches. A chokepoint guard ensures a fix can only remove, repin, move, or relocate an existing override; it can never introduce a new override key. "Proposed" fixes (the OA006 relocate floor) are surfaced as recommendations rather than applied silently.
+- `cve-lite [path] --fix` now also runs the override hygiene fix-and-verify hook after the CVE fixes complete: it applies fixable override findings, then re-audits the just-touched packages (OA001/OA008) to confirm no vulnerable copy remains nested under a parent dependency.
+- Exit code `2` is reserved for a post-`--fix` verify failure ("the fix ran but did not take"), operationally distinct from exit `1` (findings present at or above `--fail-on`) and exit `3` (tool error).
+- `--audit-log <path>` (also via `CVE_LITE_AUDIT_LOG`) streams override detection and fix events as an NDJSON change-control log.
+
+### Docs
+- README documents the `overrides` subcommand, the post-`--fix` verify pass, and the exit-code contract.
+- Override-hygiene rule reference under `docs/rules/` (`OA001`-`OA008`) and a programmatic API reference at `docs/api/overrides.md`.
+
+### Tests
+- Coverage added for the overrides parser pipeline (npm/pnpm/yarn/bun), the eight detectors, command dispatch, the fix-and-verify hook, exit-code wiring, and end-to-end CLI integration through the real binary.
+
 ## [1.18.2] - 2026-06-01
 
 ### Added

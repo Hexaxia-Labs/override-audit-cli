@@ -67,6 +67,26 @@ inputs:
     description: "Path to a PEM CA certificate file for corporate SSL inspection proxies"
     required: false
     default: ""
+  check-overrides:
+    description: "Run override hygiene checks (OA001-OA008) inline with the scan and surface findings in the same report"
+    required: false
+    default: "false"
+  overrides:
+    description: "Run a dedicated 'cve-lite overrides' audit (OA001-OA008) as a separate step in addition to the scan"
+    required: false
+    default: "false"
+  overrides-fail-on:
+    description: "Exit non-zero when the dedicated overrides audit finds an issue at or above this severity (used with overrides: true)"
+    required: false
+    default: ""
+  check-network:
+    description: "Allow the override audit to make registry calls for the OA007 drift check; off by default in CI"
+    required: false
+    default: "false"
+  audit-log:
+    description: "Stream override detection and fix events as NDJSON change-control to this path"
+    required: false
+    default: ""
 
 runs:
   using: "composite"
@@ -148,6 +168,8 @@ runs:
         INPUT_NO_CACHE: ${{ inputs.no-cache }}
         INPUT_CDX: ${{ inputs.cdx }}
         INPUT_CA_CERT: ${{ inputs.ca-cert }}
+        INPUT_CHECK_OVERRIDES: ${{ inputs.check-overrides }}
+        INPUT_AUDIT_LOG: ${{ inputs.audit-log }}
       run: |
         set -euo pipefail
 
@@ -193,6 +215,45 @@ runs:
 
         if [[ -n "${INPUT_CA_CERT}" ]]; then
           args+=("--ca-cert" "${INPUT_CA_CERT}")
+        fi
+
+        if [[ "${INPUT_CHECK_OVERRIDES}" == "true" ]]; then
+          args+=("--check-overrides")
+        fi
+
+        if [[ -n "${INPUT_AUDIT_LOG}" ]]; then
+          args+=("--audit-log" "${INPUT_AUDIT_LOG}")
+        fi
+
+        # set -e propagates the scan exit code, including exit 2 when a --fix
+        # verify pass fails, so the job fails the same way the CLI does.
+        node "${ACTION_PATH}/dist/index.js" "${args[@]}"
+
+    - name: Run override hygiene audit
+      if: ${{ inputs.overrides == 'true' }}
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        PROJECT_PATH: ${{ steps.resolve.outputs.project-path }}
+        INPUT_OVERRIDES_FAIL_ON: ${{ inputs.overrides-fail-on }}
+        INPUT_CHECK_NETWORK: ${{ inputs.check-network }}
+        INPUT_AUDIT_LOG: ${{ inputs.audit-log }}
+      run: |
+        set -euo pipefail
+
+        args=(overrides "${PROJECT_PATH}")
+
+        if [[ -n "${INPUT_OVERRIDES_FAIL_ON}" ]]; then
+          args+=("--fail-on" "${INPUT_OVERRIDES_FAIL_ON}")
+        fi
+
+        if [[ "${INPUT_CHECK_NETWORK}" == "true" ]]; then
+          args+=("--check-network")
+        fi
+
+        if [[ -n "${INPUT_AUDIT_LOG}" ]]; then
+          args+=("--audit-log" "${INPUT_AUDIT_LOG}")
         fi
 
         node "${ACTION_PATH}/dist/index.js" "${args[@]}"
