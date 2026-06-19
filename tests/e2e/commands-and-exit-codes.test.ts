@@ -112,6 +112,50 @@ describe("commands + meta", () => {
     }
   });
 
+  it("scan-path --check-overrides --fail-on counts override findings toward the exit code", () => {
+    // OA001 orphan ('gone' overridden but absent from the lockfile) fires as a high
+    // finding. In the scan path this must gate --fail-on just like the standalone
+    // `overrides` command, otherwise a CI run reports clean while overrides are dirty.
+    // The lockfile dependency is a CVE-free placeholder so the override finding is the
+    // ONLY possible fail driver (a real package could carry its own CVE and confound
+    // the assertion).
+    const make = () =>
+      mkProject(
+        npmProject(
+          { name: "failon-app", overrides: { gone: "1.0.0" } },
+          { "cve-lite-test-safe-pkg": "1.0.0" },
+        ),
+      );
+
+    // --fail-on high: the high override finding is at/above threshold -> EXIT_FINDINGS.
+    const atThreshold = make();
+    try {
+      const r = runCli([atThreshold, "--offline", "--check-overrides", "--fail-on", "high"]);
+      expect(r.status).toBe(1);
+    } finally {
+      rmProject(atThreshold);
+    }
+
+    // --fail-on critical: the high finding is below threshold -> clean exit.
+    const belowThreshold = make();
+    try {
+      const r = runCli([belowThreshold, "--offline", "--check-overrides", "--fail-on", "critical"]);
+      expect(r.status).toBe(0);
+    } finally {
+      rmProject(belowThreshold);
+    }
+
+    // Without --check-overrides the override audit never runs, so the same project
+    // exits clean regardless of --fail-on.
+    const noCheck = make();
+    try {
+      const r = runCli([noCheck, "--offline", "--fail-on", "high"]);
+      expect(r.status).toBe(0);
+    } finally {
+      rmProject(noCheck);
+    }
+  });
+
   it("overrides <clean project> --json exits 0 with a findings array", () => {
     const dir = mkProject(npmProject({ name: "x" }, { lodash: "4.17.21" }));
     try {

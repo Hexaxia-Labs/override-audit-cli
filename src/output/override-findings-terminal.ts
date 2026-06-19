@@ -30,6 +30,9 @@ export function renderOverrideFindings(findings: ReadonlyArray<OverrideFinding>)
       lines.push(`    ${f.message}`);
       if (f.fix) {
         lines.push(`    fix: applyable patch (${f.fix.patch.length} op${f.fix.patch.length === 1 ? "" : "s"})`);
+        if (f.fix.runnableCommand) {
+          lines.push(`    run: ${f.fix.runnableCommand}`);
+        }
       }
       lines.push("");
     }

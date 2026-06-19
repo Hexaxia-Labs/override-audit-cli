@@ -48,6 +48,8 @@ export function printHelp(): void {
     "  --debug                   Write verbose runtime/network diagnostics to a timestamped log file",
     "  --verbose                 Show detailed output with fix plan, paths, and full table",
     "  --prod-only               Exclude dev dependencies where available",
+    "  --check-overrides         Also audit package.json overrides (OA001..OA008); findings",
+    "                            print, thread to JSON/SARIF/HTML, and count toward --fail-on",
     "  --fail-on <severity>      Exit non-zero at or above severity (default: critical)",
     "  --batch-size <number>     OSV batch size (default: 100)",
     "  --usage                   Scan project source files to check if vulnerable dependencies are imported",

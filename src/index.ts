@@ -30,7 +30,7 @@ import {
 } from "./utils/network.js";
 import { formatAdvisoryDbFreshness } from "./utils/time.js";
 import { pluralize } from "./utils/string.js";
-import type { ParsedOptions } from "./types.js";
+import type { ParsedOptions, SeverityLabel } from "./types.js";
 import {
   formatAdvisorySourceLine,
   logInfo,
@@ -429,7 +429,6 @@ if (parsedArgs) {
     if (options.fix && fixResult) {
       const { runOverridesFixHook } = await import("./cli/fix-overrides-hook.js");
       const projectPathResolved = path.resolve(projectArg ?? ".");
-      const auditLogHandle = createAuditLog(options.auditLog ?? process.env.CVE_LITE_AUDIT_LOG);
 
       // Collect CVE-touched targets from cve-lite's fix result.
       const cveFixTargets = fixResult.applied.map((entry) => ({
@@ -451,7 +450,6 @@ if (parsedArgs) {
         logger: hookLogger,
         cveFixTargets,
       });
-      auditLogHandle.close();
 
       if (!overridesFixHookResult.verifyOk) {
         debugLog("overrides-fix-hook verify failed", {
@@ -624,7 +622,15 @@ if (parsedArgs) {
     }
 
     const failLevel = normalizeSeverity(options.failOn);
-    const shouldFail = scanState.sorted.some(f => severityOrder[f.severity] >= severityOrder[failLevel]);
+    // Override hygiene findings count toward --fail-on too, mirroring the standalone
+    // `overrides` command (src/cli/overrides.ts reachedFailOn). Without this, a CI run
+    // of `cve-lite . --check-overrides --fail-on high` would exit 0 despite high-severity
+    // override findings, giving a false sense of protection. overrideFindings is empty
+    // unless --check-overrides (and non-ratchet), so this is a no-op otherwise.
+    const reachesFailOn = (f: { severity: SeverityLabel }) =>
+      severityOrder[f.severity] >= severityOrder[failLevel];
+    const shouldFail =
+      scanState.sorted.some(reachesFailOn) || overrideFindings.some(reachesFailOn);
     const exitCode = shouldFail ? 1 : 0;
 
     // Emit scan.finished event and close audit-log

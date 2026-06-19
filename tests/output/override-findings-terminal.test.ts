@@ -39,4 +39,30 @@ describe("renderOverrideFindings (terminal)", () => {
     const out = renderOverrideFindings([f({ location: { file: "package.json", jsonPath: "/pnpm/overrides/react" } })]);
     expect(out).toMatch(/\/pnpm\/overrides\/react/);
   });
+
+  it("prints the copy-and-run command when a fix carries one", () => {
+    const out = renderOverrideFindings([
+      f({
+        fix: {
+          type: "rfc6902",
+          patch: [{ op: "remove", path: "/overrides/postcss" }],
+          runnableCommand: "cve-lite overrides --fix --rule OA001",
+        },
+      }),
+    ]);
+    expect(out).toMatch(/run: cve-lite overrides --fix --rule OA001/);
+  });
+
+  it("omits the run line when a fix has no runnableCommand", () => {
+    const out = renderOverrideFindings([
+      f({
+        fix: {
+          type: "rfc6902",
+          patch: [{ op: "remove", path: "/overrides/postcss" }],
+        },
+      }),
+    ]);
+    expect(out).toMatch(/fix: applyable patch/);
+    expect(out).not.toMatch(/run:/);
+  });
 });
