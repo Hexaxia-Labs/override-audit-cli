@@ -206,7 +206,7 @@ export type ParsedOptions = {
   checkOverrides?: boolean;
   /** --check-network - gates OA007 registry calls inside `cve-lite overrides`. */
   checkNetwork?: boolean;
-  /** --rule <id> - filter `overrides` to a single rule (OA001..OA008). */
+  /** --rule <id> - filter `overrides` to a single rule (OA001-OA008). */
   rule?: string;
 };
 
