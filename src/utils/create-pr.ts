@@ -253,7 +253,7 @@ export async function createPullRequestForFixes(
       branchName: baseBranchName,
       prUrl: null,
       skipped: true,
-      skipReason: "No direct dependency or override hygiene fixes were applied, so no pull request was created.",
+      skipReason: "No direct dependency fixes were applied, so no pull request was created.",
     };
   }
 

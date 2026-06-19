@@ -481,7 +481,7 @@ if (parsedArgs) {
         // a PR is warranted when either CVE fixes or override fixes were applied.
         const overrideFixCount = overridesFixHookResult?.applied ?? 0;
         if (fixResult.appliedFixCount === 0 && overrideFixCount === 0) {
-          logWarn("Skipping pull request creation: no direct or override hygiene fixes were applied.", options);
+          logWarn("Skipping pull request creation: no direct fixes were applied.", options);
         } else {
           console.log("");
           console.log(chalk.bold.cyan("Creating pull request (--create-pr)"));
