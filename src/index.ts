@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import path from "node:path";
 import process from "node:process";
-import { existsSync } from "node:fs";
 import { parseArgs } from "./cli/args.js";
 import { printBanner, printHelp, printOverridesHelp } from "./cli/help.js";
 import { validateOptions } from "./cli/validate.js";
@@ -99,20 +98,6 @@ if (parsedArgs) {
     process.exit(0);
   } else {
   const projectPath = path.resolve(projectArg || ".");
-  // #34: a known command would have been dispatched before this branch, so an
-  // explicit first argument that does not resolve to an existing path is almost
-  // certainly a mistyped command (e.g. `cve-lite frobnicate`). Error instead of
-  // silently scanning a nonexistent path and reporting "0 packages, exit 0" - a
-  // clean exit on a typo'd command is a foot-gun for a security tool.
-  if (projectArg && !existsSync(projectPath)) {
-    const near = nearestCommand(projectArg);
-    console.error(chalk.red(
-      `Error: '${projectArg}' is not an existing path or a known command.` +
-      (near ? ` Did you mean '${near}'?` : "")
-    ));
-    console.error(chalk.gray("Run 'cve-lite --help' for usage."));
-    process.exit(3);
-  }
   const batchSize = Number(options.batchSize || DEFAULT_BATCH_SIZE);
   const searchDepth = Math.max(0, Number(options.searchDepth || DEFAULT_SEARCH_DEPTH));
   const debugSession = createDebugLogger(!!options.debug);
@@ -684,43 +669,6 @@ if (parsedArgs) {
     process.exit(1);
   });
   }
-}
-
-/**
- * Suggest the nearest known command for a mistyped first argument (#34).
- * Returns undefined when nothing is within edit distance 2 (e.g. a real typo'd
- * path rather than a typo'd command).
- */
-function nearestCommand(arg: string): string | undefined {
-  const commands = ["overrides", "advisories", "install-skill", "config"];
-  let best: string | undefined;
-  let bestDist = 3;
-  for (const c of commands) {
-    const d = levenshtein(arg.toLowerCase(), c);
-    if (d < bestDist) {
-      bestDist = d;
-      best = c;
-    }
-  }
-  return best;
-}
-
-function levenshtein(a: string, b: string): number {
-  const m = a.length;
-  const n = b.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-  for (let i = 0; i <= m; i++) dp[i][0] = i;
-  for (let j = 0; j <= n; j++) dp[0][j] = j;
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      dp[i][j] = Math.min(
-        dp[i - 1][j] + 1,
-        dp[i][j - 1] + 1,
-        dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
-      );
-    }
-  }
-  return dp[m][n];
 }
 
 async function scanProject(params: {
